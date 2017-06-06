@@ -9,13 +9,14 @@ import numpy as np
 from pprint import pprint
 np.set_printoptions(precision=4, suppress=True)
 
-def generate_data(n_trials, percent_train, f, eigenvectors, bases):
-    # Create the MUBs
-    mubs = MUBs(f) 
-    #mle = LBMLE(mubs, eigenvectors)
-    #mc_engine = LBMLE_MC(eigenvectors)
+op_basis = [np.array([[0, 1], [1, 0]]),
+            np.array([[0, -1j], [1j, 0]]),
+            np.array([[1, 0], [0, -1]])]
 
-    op_basis = [x[0][2] for x in mubs.table]
+def generate_data(n_trials, percent_train, f, eigenvectors, bases):
+    # Create the MUBs and MLE simulator
+    mubs = MUBs(f) 
+    mc_engine = LBMLE_MC(eigenvectors)
 
     # Hold the outcomes
     train_in = []
@@ -26,23 +27,16 @@ def generate_data(n_trials, percent_train, f, eigenvectors, bases):
         state_ket = qt.rand_ket_haar(f.dim)
         state = qt.ket2dm(state_ket).full()
 
-        # Set up the MC engine and generate sample frequencies
-        #freqs = mc_engine.simulate(bases, state)
-
-        # For now just generate random frequencies and make sure they
-        # sum to 1.
-        freqs = np.random.rand(len(bases), f.dim) 
-        for j in range(len(freqs)):
-            freqs[j][1] = 1 - freqs[j][0] 
+        freqs = mc_engine.simulate(bases, state)
 
         flat_freqs = []
         for s in freqs:
             flat_freqs.extend(s)
 
-        train_in.append(flat_freqs)
-        train_out.append([2 * np.trace(np.dot(x, state)) for x in op_basis])
-        #train_out.append(state)
+        coefs = [np.trace(np.dot(x, state)) for x in op_basis]
 
+        train_in.append(flat_freqs)
+        train_out.append(coefs)
 
     # Split the data set into training and testing
     slice_point = int(n_trials * percent_train)
