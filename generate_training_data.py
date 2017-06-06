@@ -33,7 +33,9 @@ def generate_data(n_trials, percent_train, f, eigenvectors, bases):
         for s in freqs:
             flat_freqs.extend(s)
 
-        coefs = [np.trace(np.dot(x, state)) for x in op_basis]
+        # Compute the basis coefficients; they should be real, but sometimes
+        # there is a very very tiny (1e-17) complex part, so throw that away
+        coefs = [np.trace(np.dot(x, state)).real for x in op_basis]
 
         train_in.append(flat_freqs)
         train_out.append(coefs)
@@ -46,4 +48,3 @@ def generate_data(n_trials, percent_train, f, eigenvectors, bases):
     train_out = np.array(train_out[slice_point:])
 
     return train_in, train_out, test_in, test_out
-    
