@@ -22,6 +22,14 @@ def train_nn(train_in, train_out):
 
     # Now begin building the model and add a single dense layer
     model = Sequential()
-    model.add(Dense(15, input_shape = i_shape))
+    model.add(Dense(15, activation = "linear", input_shape = i_shape))
+    
+    # Add the output layer; need only one node that outputs a vector
+    model.add(Dense(len(train_out[0]), activation = "linear")) 
+    
+    model.compile(optimizer = "sgd", metrics = ['accuracy'], loss = 'categorical_crossentropy')
 
+    fit = model.fit(train_in, train_out, epochs = 100, batch_size = 20, verbose = 2)
+
+    return fit
 

@@ -11,10 +11,11 @@ from sklearn.multioutput import MultiOutputRegressor
 from generate_training_data import *
 
 def fidelity(X, Y):
-    inner = np.dot(np.dot(sqrtm(X), Y), sqrtm(X))
+    sqt = sqrtm(X)
+    inner = np.dot(np.dot(sqt, Y), sqt)
     return np.trace(sqrtm(inner)).real
 
-N_TRIALS = 10000
+N_TRIALS = 100000
 
 f = GaloisField(2)
 
@@ -37,7 +38,7 @@ for i in range(len(test_in)):
 
     #print(test_mat)
     #print(pred_mat)
-    fidelities.append(fidelity(pred_mat, test_mat))
+    fidelities.append(fidelity(test_mat, pred_mat))
 
 print(fidelities[0:20])
 print(np.average(fidelities))
