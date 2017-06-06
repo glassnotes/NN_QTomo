@@ -14,7 +14,7 @@ def fidelity(X, Y):
     inner = np.dot(np.dot(sqrtm(X), Y), sqrtm(X))
     return np.trace(sqrtm(inner)).real
 
-N_TRIALS = 1000
+N_TRIALS = 10000
 
 f = GaloisField(2)
 
@@ -25,16 +25,19 @@ regr_mor.fit(train_in, train_out)
 
 predictions = regr_mor.predict(test_in)
 
+# Scale the predictions so that the vectors have norm one 
+# i.e. make sure they are pure states on the surface of the Bloch sphere
+scaled_predictions = [p / np.linalg.norm(p) for p in predictions]
+
+fidelities = []
+
 for i in range(len(test_in)):
-    print(test_out[i])
-    print(predictions[i])
+    test_mat = (0.5*np.eye(2)) + 0.5*np.sum([test_out[i][j] * op_basis[j] for j in range(3)], 0)
+    pred_mat = (0.5*np.eye(2)) + 0.5*np.sum([scaled_predictions[i][j] * op_basis[j] for j in range(3)], 0)
 
-    test_mat = (0.5 * np.eye(2)) + 0.5 * np.sum([test_out[i][j] * op_basis[j] for j in range(3)], 0)
-    pred_mat = (0.5 * np.eye(2)) + 0.5 * np.sum([predictions[i][j] * op_basis[j] for j in range(3)], 0)
+    #print(test_mat)
+    #print(pred_mat)
+    fidelities.append(fidelity(pred_mat, test_mat))
 
-    print()
-    print(test_mat)
-    print(pred_mat)
-    print("Fidelity = " + str(fidelity(test_mat, pred_mat)))
-
-
+print(fidelities[0:20])
+print(np.average(fidelities))
