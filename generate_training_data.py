@@ -13,7 +13,11 @@ op_basis = [np.array([[0, 1], [1, 0]]),
             np.array([[0, -1j], [1j, 0]]),
             np.array([[1, 0], [0, -1]])]
 
-def generate_data(n_trials, percent_train, f, eigenvectors, bases):
+def generate_data(n_trials, percent_train, f, eigenvectors, bases, with_lbmle = False):
+    """ Generate training/testing data sets for NN, and also store the 
+        testing data separately so we can compare it with the LBMLE reconstruction
+        algorithm.
+    """
     # Create the MUBs and MLE simulator
     mubs = MUBs(f) 
     mc_engine = LBMLE_MC(eigenvectors)
@@ -21,6 +25,7 @@ def generate_data(n_trials, percent_train, f, eigenvectors, bases):
     # Hold the outcomes
     train_in = []
     train_out = []
+    lbmle_freqs = []
     
     for i in range(n_trials):
         # Generate a random state with qutip
@@ -29,6 +34,11 @@ def generate_data(n_trials, percent_train, f, eigenvectors, bases):
 
         freqs = mc_engine.simulate(bases, state)
 
+        # Add to lbmle data set
+        if with_lbmle:
+            lbmle_freqs.append(freqs)
+
+        # Flatten and add to NN data set
         flat_freqs = []
         for s in freqs:
             flat_freqs.extend(s)
@@ -47,4 +57,9 @@ def generate_data(n_trials, percent_train, f, eigenvectors, bases):
     train_in = np.array(train_in[slice_point:])
     train_out = np.array(train_out[slice_point:])
 
+    if with_lbmle: 
+        return train_in, train_out, test_in, test_out, lbmle_freqs[0:slice_point] 
+
+    # No LBMLE data, just return training/testing data
     return train_in, train_out, test_in, test_out
+    
