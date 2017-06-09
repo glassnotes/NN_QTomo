@@ -4,30 +4,22 @@ from eigvecs_dim2 import eigenvectors
 
 from scipy.linalg import sqrtm
 
-import keras.backend as K
+import theano
+import theano.tensor as T
+
 from keras.layers import Input, Dense
 from keras.models import Sequential
 
 from generate_training_data import *
 
-def fidelity(X, Y):
-   """ Compute the fidelity of two density matrices. """
-   sqt = sqrtm(X)
-   inner = np.dot(np.dot(sqt, Y), sqt)
-   return np.trace(sqrtm(inner)).real
-
-def fidelity_metric(y_true, y_pred):
-    """ Compute and return the fidelity of two density matrices from their
-        expansion coefficients. Used as the accuracy metric for training the neural network.
+def angle_metric(y_true, y_pred):
+    """ As some measure of accuracy / distance, compute the angle between the 
+        actual and predicted Bloch vectors. The program should in theory try to 
+        find states that are close on the Bloch sphere, right? Do 1 - the angle 
+        scaled by pi because we want things that have angle close to 0 to be
+        better than other cases.
     """
-    print(y_true)
-    true_mat = (0.5*np.eye(2)) + 0.5*np.sum([y_true[j] * op_basis[j] for j in range(3)], 0) 
-
-    print(y_pred)
-    y_pred_scaled = [p / np.linalg.norm(p) for p in y_pred]
-    pred_mat = (0.5*np.eye(2)) + 0.5*np.sum([y_pred_scaled[j] * op_basis[j] for j in range(3)], 0) 
-
-    return K.variable(fidelity(true_mat, pred_mat))
+    return 1 - abs(T.arccos(T.dot(y_true, y_pred / T.sqrt(T.sum(y_pred ** 2)) ) )) / np.pi 
 
 
 def train_nn(train_in, train_out, hidden_layer_size):
@@ -48,12 +40,12 @@ def train_nn(train_in, train_out, hidden_layer_size):
 
     # Now begin building the model and add a single dense layer
     model = Sequential()
-    model.add(Dense(hidden_layer_size, activation = "sigmoid", input_shape = i_shape))
+    model.add(Dense(hidden_layer_size, activation = "tanh", input_shape = i_shape))
     
     # Add the output layer; need only one node that outputs a vector
     model.add(Dense(len(train_out[0]), activation = "softmax")) 
     
-    model.compile(optimizer = "sgd", metrics = ['accuracy'], loss = 'categorical_crossentropy')
+    model.compile(optimizer = "sgd", metrics = [angle_metric], loss = 'kullback_leibler_divergence')
 
     model.fit(train_in, train_out, epochs = 100, batch_size = 20, verbose = 2)
 
@@ -61,7 +53,7 @@ def train_nn(train_in, train_out, hidden_layer_size):
 
 
 # Actually create the neural network and do stuff.
-N_TRIALS = 1000
+N_TRIALS = 100
 
 f = GaloisField(2)
 train_in, train_out, test_in, test_out, lbmle_freqs = generate_data(N_TRIALS, 0.1, f, eigenvectors, [0, 1], True)
@@ -84,7 +76,15 @@ for size in hidden_layer_sizes:
 
         actual_test_mats.append(test_mat) # Store the actual matrices to use in LBMLE section later
 
-        fidelities.append(fidelity(test_mat, pred_mat))
+        fidelities.append(qt.fidelity(qt.Qobj(test_mat), qt.Qobj(pred_mat)))
+
+        if i in range(25, 30):
+            #print("Actual matrix")
+            #print(test_mat)
+            print("NN predicted matrix")
+            print(pred_mat)
+            #print("Fidelity")
+            #print(qt.fidelity(qt.Qobj(test_mat), qt.Qobj(pred_mat)))
 
     results_nn.append((size, np.average(fidelities))) 
 
@@ -94,8 +94,16 @@ mle = LBMLE(MUBs(f), eigenvectors)
 
 for i in range(len(lbmle_freqs)):
     mle_res = mle.estimate([0, 1], lbmle_freqs[i])
-    fid = fidelity(mle_res[0], actual_test_mats[i])
+    fid = qt.fidelity(qt.Qobj(mle_res[0]), qt.Qobj(actual_test_mats[i]))
     results_lbmle.append(fid) 
+    """
+    if i == 25:
+        print("Actual matrix")
+        print(actual_test_mats[i])
+        print("LBMLE predicted matrix: ")
+        print(mle_res[0])
+        print("Fidelity")
+        print(fid)"""
     
 
 for res in results_nn:
