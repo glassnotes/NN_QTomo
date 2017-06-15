@@ -4,23 +4,10 @@ from eigvecs_dim2 import eigenvectors
 
 from scipy.linalg import sqrtm
 
-import theano
-import theano.tensor as T
-
 from keras.layers import Input, Dense
 from keras.models import Sequential
 
 from generate_training_data import *
-
-def angle_metric(y_true, y_pred):
-    """ As some measure of accuracy / distance, compute the angle between the 
-        actual and predicted Bloch vectors. The program should in theory try to 
-        find states that are close on the Bloch sphere, right? Do 1 - the angle 
-        scaled by pi because we want things that have angle close to 0 to be
-        better than other cases.
-    """
-    return 1 - abs(T.arccos(T.dot(y_true, y_pred / T.sqrt(T.sum(y_pred ** 2)) ) )) / np.pi 
-
 
 def train_nn(train_in, train_out, hidden_layer_size):
     """ Build and train a neural network using the 'experimental data'.
@@ -45,7 +32,9 @@ def train_nn(train_in, train_out, hidden_layer_size):
     # Add the output layer; need only one node that outputs a vector
     model.add(Dense(len(train_out[0]), activation = "softmax")) 
     
-    model.compile(optimizer = "sgd", metrics = [angle_metric], loss = 'kullback_leibler_divergence')
+    # Cosine proximity gives us a measure of the angle between the true/predicted
+    # values on the Bloch sphere.
+    model.compile(optimizer = "sgd", loss = 'cosine_proximity')
 
     model.fit(train_in, train_out, epochs = 100, batch_size = 20, verbose = 2)
 
@@ -53,7 +42,7 @@ def train_nn(train_in, train_out, hidden_layer_size):
 
 
 # Actually create the neural network and do stuff.
-N_TRIALS = 100
+N_TRIALS = 10000
 
 f = GaloisField(2)
 train_in, train_out, test_in, test_out, lbmle_freqs = generate_data(N_TRIALS, 0.1, f, eigenvectors, [0, 1], True)
