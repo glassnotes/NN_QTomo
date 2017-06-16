@@ -1,6 +1,6 @@
 from pynitefields import *
 from balthasar import *
-from eigvecs_dim2 import eigenvectors
+from eigvecs_dim4 import eigenvectors
 
 from scipy.linalg import sqrtm
 
@@ -31,6 +31,7 @@ def train_nn(train_in, train_out, hidden_layer_size):
     # Now begin building the model and add a single dense layer
     model = Sequential()
     model.add(Dense(hidden_layer_size, activation = "tanh", input_shape = i_shape))
+    model.add(Dense(hidden_layer_size, activation = "tanh"))
     
     # Add the output layer; need only one node that outputs a vector
     model.add(Dense(len(train_out[0]), activation = "tanh")) 
@@ -45,13 +46,18 @@ def train_nn(train_in, train_out, hidden_layer_size):
 
 
 # Actually create the neural network and do stuff.
-N_TRIALS = 1000
+N_TRIALS = 10000
 
-f = GaloisField(2)
+f = GaloisField(2, 2, [1, 1, 1])
+f.to_sdb([1, 2])
+
 bases = [0, -1]
 train_in, train_out, test_in, test_out, lbmle_freqs = generate_data(N_TRIALS, 0.1, f, eigenvectors, bases, True)
 
-hidden_layer_sizes = [16, 32, 64, 128]
+pf = 1.0 / f.dim
+num_params = f.dim ** 2 - 1 
+
+hidden_layer_sizes = [64]
 results_nn = []
 actual_test_mats = []
 
@@ -65,8 +71,8 @@ for size in hidden_layer_sizes:
     fidelities = []
 
     for i in range(len(test_in)):
-        test_mat = (0.5*np.eye(2)) + 0.5*np.sum([test_out[i][j] * op_basis[j] for j in range(3)], 0)
-        pred_mat = (0.5*np.eye(2)) + 0.5*np.sum([scaled_predictions[i][j] * op_basis[j] for j in range(3)], 0)
+        test_mat = (pf*np.eye(f.dim)) + pf*np.sum([test_out[i][j] * op_basis[j] for j in range(num_params)], 0)
+        pred_mat = (pf*np.eye(f.dim)) + pf*np.sum([scaled_predictions[i][j] * op_basis[j] for j in range(num_params)], 0)
 
         actual_test_mats.append(test_mat) # Store the actual matrices to use in LBMLE section later
 

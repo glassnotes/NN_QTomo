@@ -9,9 +9,21 @@ import numpy as np
 from pprint import pprint
 np.set_printoptions(precision=4, suppress=True)
 
-op_basis = [np.array([[0, 1], [1, 0]]),
-            np.array([[0, -1j], [1j, 0]]),
-            np.array([[1, 0], [0, -1]])]
+I = np.array([[1, 0], [0, 1]])
+X = np.array([[0, 1], [1, 0]])
+Y = np.array([[0, -1j], [1j, 0]])
+Z = np.array([[1, 0], [0, -1]])
+
+sqp = [I, X, Y, Z]
+
+op_basis = []
+for i in range(4):
+    for j in range(4):
+        if i == 0 and j == 0:
+            continue
+        else:
+            op_basis.append(np.kron(sqp[i], sqp[j]))
+            
 
 def generate_data(n_trials, percent_train, f, eigenvectors, bases, with_lbmle = False):
     """ Generate training/testing data sets for NN, and also store the 
