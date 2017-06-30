@@ -17,8 +17,6 @@ def psd_finder(M):
     eigsys = np.linalg.eigh(M)
     eigvals, eigvecs = eigsys[0], eigsys[1]
 
-    print(eigvals)
-
     # Figure out the indices of the positive eigvalues
     pos_eigvals = [x for x in range(len(eigvals)) if eigvals[x] >= 0]
 

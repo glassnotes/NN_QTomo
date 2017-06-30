@@ -45,15 +45,16 @@ def train_nn(train_in, train_out, hidden_layer_size):
 
 
 # Actually create the neural network and do stuff.
-N_TRIALS = 1000
+N_TRIALS = 100
 
 f = GaloisField(2)
 bases = [0, -1]
 train_in, train_out, test_in, test_out, lbmle_freqs = generate_data(N_TRIALS, 0.1, f, eigenvectors, bases, True)
 
-hidden_layer_sizes = [16, 32, 64, 128]
+hidden_layer_sizes = [64]
 results_nn = []
 actual_test_mats = []
+angles = []
 
 for size in hidden_layer_sizes:
     print("Training neural network: ")
@@ -70,15 +71,16 @@ for size in hidden_layer_sizes:
 
         actual_test_mats.append(test_mat) # Store the actual matrices to use in LBMLE section later
 
+        angles.append(np.arccos(test_out[i][2]) / np.pi)
         fidelities.append(qt.fidelity(qt.Qobj(test_mat), qt.Qobj(pred_mat)))
 
-        if i in range(25, 30):
-            print("Actual matrix")
-            print(test_mat)
-            print(test_out[i])
-            print("NN predicted matrix")
-            print(pred_mat)
-            print(scaled_predictions[i])
+        #if i in range(25, 30):
+        #    print("Actual matrix")
+        #    print(test_mat)
+        #    print(test_out[i])
+        #    print("NN predicted matrix")
+        #    print(pred_mat)
+        #    print(scaled_predictions[i])
             #print("Fidelity")
             #print(qt.fidelity(qt.Qobj(test_mat), qt.Qobj(pred_mat)))
 
@@ -101,10 +103,11 @@ for i in range(len(lbmle_freqs)):
         print("Fidelity")
         print(fid)"""
     
-"""with open("fids_dim2.csv", "w") as outfile:
+"""with open("angle_investigation_dim2_xy_lbmle.csv", "w") as outfile:
     writer = csv.writer(outfile)
-    writer.writerow(["NN", "LBMLE"])
-    for row in zip(fidelities, results_lbmle):
+    writer.writerow(["Angle", "Fid_NN", "Fid_LBMLE"])
+    #for row in zip(fidelities, results_lbmle):
+    for row in zip(angles, fidelities, results_lbmle):
         writer.writerow(row)"""
 
 for res in results_nn:
