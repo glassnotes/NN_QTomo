@@ -4,6 +4,8 @@ from balthasar import *
 import qutip as qt
 import numpy as np
 
+from multiprocessing import Pool
+
 from math import sqrt
 
 def multiproc_generation(n_trials, dim, mc_engine, bases, op_basis):
@@ -77,13 +79,13 @@ def generate_data(n_trials, n_workers, percent_test, f, op_basis, eigenvectors, 
     all_freqs = [x for y in all_freqs_ugly for x in y]
     
     all_coefs_ugly = [x[1] for x in all_data]
-    all_coefs = [x for y in all_coefs for x in y]
+    all_coefs = [x for y in all_coefs_ugly for x in y]
          
     all_lbmle_freqs_ugly = [x[2] for x in all_data]
     all_lbmle_freqs = [x for y in all_lbmle_freqs_ugly for x in y]
 
     # Split the data set into training and testing
-    slice_point = int(n_trials * percent_train)
+    slice_point = int(n_trials * percent_test)
     test_in = np.array(all_freqs[0:slice_point])
     test_out = np.array(all_coefs[0:slice_point])
     train_in = np.array(all_freqs[slice_point:])
