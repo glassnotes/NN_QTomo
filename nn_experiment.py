@@ -59,9 +59,7 @@ def main():
     print("Num trials " + str(n_trials))
     print("Num workers " + str(n_workers))
     print("Percent test " + str(percent_test))
-
-
-
+    print("Bases " + str(bases))
 
     hidden_layer_sizes = [64]
 
@@ -165,25 +163,44 @@ def main():
         results_nn.append((size, np.average(fidelities))) 
 
     # For each testing frequency, do LBMLE reconstruction and compute a fidelity
-    do_mle = False
+    do_mle = True
+    results_lbmle = []
     if do_mle:
-        results_lbmle = []
         mle = LBMLE(MUBs(f), eigenvectors)
    
         for i in range(len(lbmle_freqs)):
+            next_results = ["lbmle"]
+
             mle_res = mle.estimate(bases, lbmle_freqs[i])
+            mle_coefs = []
+            if d % 2 == 0:
+                mle_coefs = [np.trace(np.dot(x, mle_res[0])).real for x in op_basis]
+            elif d == 3:
+                mle_coefs= [sqrt(3) * 0.5 * np.trace(np.dot(x, mle_res[0])).real for x in op_basis]
+
+            fid = qt.fidelity(qt.Qobj(mle_res[0]), qt.Qobj(actual_test_mats[i]))
+
+            next_results.extend(mle_coefs)
+
             if not is_psd(mle_res[0]):
                 print("Oh dear, LBMLE reconstructed matrix is not PSD.")
                 print("Matrix has eigenvalues ")
                 print(np.linalg.eigvals(M))
-            fid = qt.fidelity(qt.Qobj(mle_res[0]), qt.Qobj(actual_test_mats[i]))
-            results_lbmle.append(fid) 
+                next_results.append(0)
+            else:
+                next_results.append(1)
 
-        print("LBMLE avg fidelity = " + str(np.average(results_lbmle)))
+            next_results.append(fid)
+            results_lbmle.append(next_results)
+
+        print("LBMLE avg fidelity = " + str(np.average([x[-1] for x in results_lbmle])))
 
     with open(filename, "w") as outfile:
         writer = csv.writer(outfile)
         for row in results: 
+            writer.writerow(row)
+
+        for row in results_lbmle:
             writer.writerow(row)
 
     for res in results_nn:
