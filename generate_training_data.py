@@ -1,106 +1,93 @@
 from pynitefields import *
 from balthasar import *
 
-import csv
-
 import qutip as qt
 import numpy as np
 
-from pprint import pprint
-np.set_printoptions(precision=4, suppress=True)
-
 from math import sqrt
 
-I = np.array([[1, 0], [0, 1]])
-X = np.array([[0, 1], [1, 0]])
-Y = np.array([[0, -1j], [1j, 0]])
-Z = np.array([[1, 0], [0, -1]])
+def multiproc_generation(n_trials, dim, mc_engine, bases, op_basis):
+    """ On a single processor, generate n_trials random states and frequencies and
+        return it for processing by the master thread.
+    """
+    # Result storage
+    input_frequencies = []
+    output_coefs = [] 
+    lbmle_frequencies = []
 
-sqp = [I, X, Y, Z]
+    for i in range(n_trials):
+        state_ket = qt.rand_ket_haar(dim)
+        state = qt.ket2dm(state_ket).full()
 
-# Dim 2 case
-#op_basis = [X, Y, Z]
+        freqs = mc_engine.simulate(bases, state)
 
-# Dim 3 case - Gell-Mann matrces as our basis, see Bertlmann and Krammer
-ls12 = np.array([[0, 1, 0], [1, 0, 0], [0, 0, 0]])
-ls13 = np.array([[0, 0, 1], [0, 0, 0], [1, 0, 0]])
-ls23 = np.array([[0, 0, 0], [0, 0, 1], [0, 1, 0]])
-la12 = np.array([[0,-1j, 0], [1j, 0, 0], [0, 0, 0]])
-la13 = np.array([[0, 0, -1j], [0, 0, 0], [1j, 0, 0]])
-la23 = np.array([[0, 0, 0], [0, 0, -1j], [0, 1j, 0]])
-ld1 = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 0]])
-ld2 = (1/sqrt(3)) * np.array([[1, 0, 0], [0, 1, 0], [0, 0, -2]])
+        # Flatten to add to NN data set
+        flat_freqs = []
+        for s in freqs:
+            flat_freqs.extend(s)
 
-op_basis = [ls12, ls13, ls23, la12, la13, la23, ld1, ld2]
+        coefs = []
+        if dim % 2 == 0:
+            coefs = [np.trace(np.dot(x, state)).real for x in op_basis]
+        # For the Gell-Mann basis in dimension 3, traces are 2
+        elif dim == 3:
+            coefs = [sqrt(3) * 0.5 * np.trace(np.dot(x, state)).real for x in op_basis]
+        else: 
+            print("Invalid dimension in multiproc_generate.")
 
-"""
-# Dim 4 case
-op_basis = []
-for i in range(4):
-    for j in range(4):
-        if i == 0 and j == 0:
-            continue
-        else:
-            op_basis.append(np.kron(sqp[i], sqp[j]))
-  """          
+        # Update the data sets
+        input_frequencies.append(flat_freqs)
+        output_coefs.append(coefs)
+        lbmle_frequencies.append(freqs)
 
-def generate_data(n_trials, percent_train, f, eigenvectors, bases, with_lbmle = False):
-    """ Generate training/testing data sets for NN, and also store the 
+    return input_frequencies, output_coefs, lbmle_frequencies
+
+
+def generate_data(n_trials, n_workers, percent_test, f, op_basis, eigenvectors, bases):
+    """ Generate training/testing data sets for our neural network, as well as store the
         testing data separately so we can compare it with the LBMLE reconstruction
         algorithm.
+
+        n_trails - Total number of data points
+        n_workers - Number of processes to spawn for generation (please make nicely divisible into n_trails)
+        percent_test - How much of the data to return as testing data.
+        f - The underlying finite field
+        op_basis - The basis expansion in which we should compute the output coefficients
+        eigenvectors - The MUBs in this dimension
+        bases - The bases that we're measuring in.
+
+        Returns train_in, train_out, test_in, test_out, and lbmle_freqs which is a copy of 
+        test_in but suitable for use in the LBMLE reconstruction algorithm of Balthasar.
     """
     # Create the MUBs and MLE simulator
     mubs = MUBs(f) 
     mc_engine = LBMLE_MC(eigenvectors)
 
-    # Hold the outcomes
-    train_in = []
-    train_out = []
-    lbmle_freqs = []
+    # Set parameters for multiprocessing
+    trials_per_worker = int(n_trials * 1./ n_workers) 
+    input_params = [(trials_per_worker, f.dim, mc_engine, bases, op_basis)] * n_workers
+
+    # Call in the troops!
+    pool = Pool(processes = n_workers)
+    all_data = pool.starmap(multiproc_generation, input_params)
+
+    # Unfortunately what comes back is ugly. Thank god for stack overflow!
+    # https://stackoverflow.com/questions/952914/making-a-flat-list-out-of-list-of-lists-in-python
+    all_freqs_ugly = [x[0] for x in all_data]
+    all_freqs = [x for y in all_freqs_ugly for x in y]
     
-    for i in range(n_trials):
-        # Generate a random state with qutip
-        state_ket = qt.rand_ket_haar(f.dim)
-        state = qt.ket2dm(state_ket).full()
-        #state_ket_1 = qt.rand_ket_haar(2)
-        #state_ket_2 = qt.rand_ket_haar(2)
-        #state = np.kron(qt.ket2dm(state_ket_1).full(), qt.ket2dm(state_ket_2).full())
+    all_coefs_ugly = [x[1] for x in all_data]
+    all_coefs = [x for y in all_coefs for x in y]
+         
+    all_lbmle_freqs_ugly = [x[2] for x in all_data]
+    all_lbmle_freqs = [x for y in all_lbmle_freqs_ugly for x in y]
 
-        freqs = mc_engine.simulate(bases, state, 10000)
-
-        # Add to lbmle data set
-        if with_lbmle:
-            lbmle_freqs.append(freqs)
-
-        # Flatten and add to NN data set
-        flat_freqs = []
-        for s in freqs:
-            flat_freqs.extend(s)
-
-        # Compute the basis coefficients; they should be real, but sometimes
-        # there is a very very tiny (1e-17) complex part, so throw that away
-    
-        # For a Pauli basis
-        #coefs = [np.trace(np.dot(x, state)).real for x in op_basis]
-
-        # For the Gell-Mann basis in dimension 3
-        coefs = [sqrt(3) * 0.5 * np.trace(np.dot(x, state)).real for x in op_basis]
-
-        train_in.append(flat_freqs)
-        train_out.append(coefs)
-
-    return train_in, train_out, lbmle_freqs
-
-    """# Split the data set into training and testing
+    # Split the data set into training and testing
     slice_point = int(n_trials * percent_train)
-    test_in = np.array(train_in[0:slice_point])
-    test_out = np.array(train_out[0:slice_point])
-    train_in = np.array(train_in[slice_point:])
-    train_out = np.array(train_out[slice_point:])
+    test_in = np.array(all_freqs[0:slice_point])
+    test_out = np.array(all_coefs[0:slice_point])
+    train_in = np.array(all_freqs[slice_point:])
+    train_out = np.array(all_coefs[slice_point:])
+    lbmle_freqs = np.array(all_lbmle_freqs[0:slice_point])
 
-    if with_lbmle: 
-        return train_in, train_out, test_in, test_out, lbmle_freqs[0:slice_point] 
-
-    # No LBMLE data, just return training/testing data
-    return train_in, train_out, test_in, test_out"""
-    
+    return train_in, train_out, test_in, test_out, lbmle_freqs
