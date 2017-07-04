@@ -10,7 +10,7 @@ import numpy as np
 # Import all the other things I wrote!
 from eigvecs import *
 from psd_utils import *
-from select_operator_basis import *
+from gen_gell_mann_basis import *
 from generate_training_data import *
 from train_neural_net import *
 
@@ -51,7 +51,7 @@ def main():
     percent_test = float(sys.argv[4])
 
     bases = [int(x) for x in sys.argv[5].split(",")]
-    op_basis = select_operator_basis(d)
+    op_basis = gen_gell_mann_basis(d)
 
     filename = sys.argv[6]
     
@@ -84,12 +84,14 @@ def main():
         print("Training neural network: ")
         my_nn = train_nn(train_in, train_out, size)
 
-        # Normalize the predictions
+        # Normalize the predictions to the length of the Bloch ball in this dimension
+        bloch_ball_pf = sqrt(1. * (d - 1) / (2 * d))
         predictions = my_nn.predict(test_in)
-        scaled_predictions = [p / np.linalg.norm(p) for p in predictions]
+        scaled_predictions = [(2 * bloch_ball_pf) * (p / np.linalg.norm(p)) for p in predictions]
 
         # Compute the fidelity with the test data
         fidelities = []
+
 
         for i in range(len(test_in)):
             # We are going to store data for three things:
@@ -98,27 +100,44 @@ def main():
             next_results_pred = ["pred"]
             next_results_closest = ["closest"]
 
+            if i == 3:
+                print(np.linalg.norm(scaled_predictions[i]))
+
             # Compute the density matrix using the reconstructed coefficients
             # No matter what dimension, always have 1/d * Identity as first component
             test_mat = (1./d)*np.eye(d)
             pred_mat = (1./d)*np.eye(d)
 
-            # For the Pauli basis, at least, for one qubit this works fine
-            if d % 2 == 0:
+            test_mat = test_mat + np.sum([test_out[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)
+            pred_mat = pred_mat + np.sum([scaled_predictions[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)
+
+            """# For the Pauli basis, at least, for one qubit this works fine
+            if d == 2:
                 test_mat = test_mat + (1./d)*np.sum([test_out[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)
                 pred_mat = pred_mat + (1./d)*np.sum([scaled_predictions[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)
             # For the qutrit Gell-Mann basis, different coefficients required when reconstructing
             elif d == 3:
-                test_mat = test_mat + (1./sqrt(d))*np.sum([test_out[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)
-                pred_mat = pred_mat + (1./sqrt(d))*np.sum([scaled_predictions[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)
+                test_mat = test_mat + (1/sqrt(3))*np.sum([test_out[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)
+                pred_mat = pred_mat + (1/sqrt(3))*np.sum([scaled_predictions[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)
+            elif d == 4:
+                #test_mat = test_mat + 0.5 * np.sum([test_out[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)
+                #pred_mat = pred_mat + 0.5 * np.sum([scaled_predictions[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)
+                #test_mat = test_mat + (1./d) * np.sum([test_out[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)
+                #pred_mat = pred_mat + (1./d) * np.sum([scaled_predictions[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)
+                test_mat = test_mat + (1./d) * np.sum([test_out[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)
+                pred_mat = pred_mat + (1./d) * np.sum([scaled_predictions[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)"""
 
             # Now that we've computed the predicted matrix, compute the closest PSD matrix
             closest_psd = find_closest_psd(pred_mat)
-            closest_coefs = []
-            if d % 2 == 0:
+            closest_coefs = [np.trace(np.dot(x, closest_psd)).real for x in op_basis]
+            """if d == 2:
                 closest_coefs = [np.trace(np.dot(x, closest_psd)).real for x in op_basis]
             elif d == 3:
                 closest_coefs = [sqrt(3) * 0.5 * np.trace(np.dot(x, closest_psd)).real for x in op_basis]
+            elif d == 4:
+                #closest_coefs = [0.5 * np.trace(np.dot(x, closest_psd)).real for x in op_basis]
+                #closest_coefs = [np.trace(np.dot(x, closest_psd)).real for x in op_basis]
+                closest_coefs = [np.trace(np.dot(np.asmatrix(x).getH(), closest_psd)).real for x in op_basis]"""
 
             # Add all the coefficients to their proper rows
             next_results_test.extend(test_out[i])
@@ -172,11 +191,17 @@ def main():
             next_results = ["lbmle"]
 
             mle_res = mle.estimate(bases, lbmle_freqs[i])
-            mle_coefs = []
-            if d % 2 == 0:
+            mle_coefs = [np.trace(np.dot(x, mle_res[0])).real for x in op_basis]
+
+            #mle_coefs = []
+            """if d == 2:
                 mle_coefs = [np.trace(np.dot(x, mle_res[0])).real for x in op_basis]
             elif d == 3:
                 mle_coefs= [sqrt(3) * 0.5 * np.trace(np.dot(x, mle_res[0])).real for x in op_basis]
+            elif d == 4:
+                #mle_coefs= [0.5 * np.trace(np.dot(x, mle_res[0])).real for x in op_basis]
+                #mle_coefs= [np.trace(np.dot(x, mle_res[0])).real for x in op_basis]
+                mle_coefs= [np.trace(np.dot(np.asmatrix(x).getH(), mle_res[0])).real for x in op_basis]"""
 
             fid = qt.fidelity(qt.Qobj(mle_res[0]), qt.Qobj(actual_test_mats[i]))
 

@@ -27,15 +27,36 @@ def multiproc_generation(n_trials, dim, mc_engine, bases, op_basis):
         flat_freqs = []
         for s in freqs:
             flat_freqs.extend(s)
+         
+        coefs = [np.trace(np.dot(x, state)).real for x in op_basis]
 
-        coefs = []
-        if dim % 2 == 0:
+        """coefs = []
+        if dim == 2:
             coefs = [np.trace(np.dot(x, state)).real for x in op_basis]
         # For the Gell-Mann basis in dimension 3, traces are 2
         elif dim == 3:
             coefs = [sqrt(3) * 0.5 * np.trace(np.dot(x, state)).real for x in op_basis]
-        else: 
-            print("Invalid dimension in multiproc_generate.")
+        elif dim == 4:
+            if int(np.trace(op_basis[1]).real) == 2: # Gell-Mann
+                coefs = [np.trace(np.dot(x, state)).real for x in op_basis]
+            else: # Pauli
+                #coefs = [np.trace(np.dot(x, state)).real for x in op_basis]
+                coefs_real = [np.trace(np.dot(np.asmatrix(x).getH(), state)).real for x in op_basis]
+                coefs = [np.trace(np.dot(np.asmatrix(x).getH(), state)) for x in op_basis]
+                
+                print(coefs_real)
+                print(coefs)
+
+                test_mat = (1./4) * np.eye(4) + (1./4) * np.sum([coefs[j] * op_basis[j] for j in range(4 ** 2 - 1)], 0)
+                import pprint
+                pprint.pprint(state)
+                pprint.pprint(test_mat)
+
+                import sys
+                sys.exit()"""
+                        
+        """else: 
+            print("Invalid dimension in multiproc_generate.")"""
 
         # Update the data sets
         input_frequencies.append(flat_freqs)

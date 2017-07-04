@@ -38,9 +38,4 @@ def gen_gell_mann_basis(d):
     
         ggb.append(prefactor * (sum_over_j - l * proj(d, l, l)))
         
-    for op in ggb:
-        pprint(op)
-        
     return ggb 
-
-
