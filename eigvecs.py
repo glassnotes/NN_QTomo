@@ -1,3 +1,7 @@
+# A collection of mutually unbiased bases. Yes, I realize this is an absolutely terrible
+# way of storing such things but I haven't implemented their generation in Balthasar yet.
+# They are ordered according to their associated monomials' slope.
+
 import numpy as np
 from math import sqrt
 
