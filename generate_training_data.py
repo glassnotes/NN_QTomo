@@ -8,7 +8,7 @@ from multiprocessing import Pool
 
 from math import sqrt
 
-def multiproc_generation(n_trials, dim, mc_engine, bases, op_basis):
+def multiproc_generation(n_trials, d, mc_engine, bases, op_basis):
     """ On a single processor, generate n_trials random states and frequencies and
         return it for processing by the master thread.
     """
@@ -18,7 +18,7 @@ def multiproc_generation(n_trials, dim, mc_engine, bases, op_basis):
     lbmle_frequencies = []
 
     for i in range(n_trials):
-        state_ket = qt.rand_ket_haar(dim)
+        state_ket = qt.rand_ket_haar(d)
         state = qt.ket2dm(state_ket).full()
 
         freqs = mc_engine.simulate(bases, state)
@@ -27,15 +27,11 @@ def multiproc_generation(n_trials, dim, mc_engine, bases, op_basis):
         flat_freqs = []
         for s in freqs:
             flat_freqs.extend(s)
-
-        coefs = []
-        if dim % 2 == 0:
-            coefs = [np.trace(np.dot(x, state)).real for x in op_basis]
-        # For the Gell-Mann basis in dimension 3, traces are 2
-        elif dim == 3:
-            coefs = [sqrt(3) * 0.5 * np.trace(np.dot(x, state)).real for x in op_basis]
-        else: 
-            print("Invalid dimension in multiproc_generate.")
+        
+        # Compute the Bloch vector coefficients using the Gell-Mann basis.
+        # This will be a vector of length sqrt((d-1)/2d))
+        # The factor of 0.5 is because the traces of the Gell-Mann ops are all 2
+        coefs = [0.5 * np.trace(np.dot(x, state)).real for x in op_basis]
 
         # Update the data sets
         input_frequencies.append(flat_freqs)

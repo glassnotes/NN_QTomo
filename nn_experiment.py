@@ -10,7 +10,7 @@ import numpy as np
 # Import all the other things I wrote!
 from eigvecs import *
 from psd_utils import *
-from select_operator_basis import *
+from gen_gell_mann_basis import *
 from generate_training_data import *
 from train_neural_net import *
 
@@ -51,7 +51,7 @@ def main():
     percent_test = float(sys.argv[4])
 
     bases = [int(x) for x in sys.argv[5].split(",")]
-    op_basis = select_operator_basis(d)
+    op_basis = gen_gell_mann_basis(d)
 
     filename = sys.argv[6]
     
@@ -61,12 +61,10 @@ def main():
     print("Percent test " + str(percent_test))
     print("Bases " + str(bases))
 
-    hidden_layer_sizes = [64]
+    hidden_layer_sizes = [128]
 
     results_nn = []
     actual_test_mats = []
-    angles = []
-
     # Build the header for the output
     results = [["type"] + ["p" + str(i) for i in range(1, d**2)] + ["psd", "fidelity"]]
 
@@ -84,12 +82,15 @@ def main():
         print("Training neural network: ")
         my_nn = train_nn(train_in, train_out, size)
 
-        # Normalize the predictions
+        # Normalize the predictions to the length of the Bloch ball in this dimension
+        bloch_ball_pf = sqrt(1. * (d - 1) / (2 * d))
         predictions = my_nn.predict(test_in)
-        scaled_predictions = [p / np.linalg.norm(p) for p in predictions]
+        scaled_predictions = [bloch_ball_pf * p / np.linalg.norm(p) for p in predictions]
 
         # Compute the fidelity with the test data
-        fidelities = []
+        fidelities_direct = []
+        fidelities_psd = []
+
 
         for i in range(len(test_in)):
             # We are going to store data for three things:
@@ -99,36 +100,20 @@ def main():
             next_results_closest = ["closest"]
 
             # Compute the density matrix using the reconstructed coefficients
-            # No matter what dimension, always have 1/d * Identity as first component
-            test_mat = (1./d)*np.eye(d)
-            pred_mat = (1./d)*np.eye(d)
-
-            # For the Pauli basis, at least, for one qubit this works fine
-            if d % 2 == 0:
-                test_mat = test_mat + (1./d)*np.sum([test_out[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)
-                pred_mat = pred_mat + (1./d)*np.sum([scaled_predictions[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)
-            # For the qutrit Gell-Mann basis, different coefficients required when reconstructing
-            elif d == 3:
-                test_mat = test_mat + (1./sqrt(d))*np.sum([test_out[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)
-                pred_mat = pred_mat + (1./sqrt(d))*np.sum([scaled_predictions[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)
+            test_mat = (1./d)*np.eye(d) + np.sum([test_out[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)
+            pred_mat = (1./d)*np.eye(d) + np.sum([scaled_predictions[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)
 
             # Now that we've computed the predicted matrix, compute the closest PSD matrix
             closest_psd = find_closest_psd(pred_mat)
-            closest_coefs = []
-            if d % 2 == 0:
-                closest_coefs = [np.trace(np.dot(x, closest_psd)).real for x in op_basis]
-            elif d == 3:
-                closest_coefs = [sqrt(3) * 0.5 * np.trace(np.dot(x, closest_psd)).real for x in op_basis]
+            closest_coefs = [0.5 * np.trace(np.dot(x, closest_psd)).real for x in op_basis]
 
             # Add all the coefficients to their proper rows
             next_results_test.extend(test_out[i])
             next_results_pred.extend(scaled_predictions[i])
             next_results_closest.extend(closest_coefs)
 
-
-            angles.append(np.arccos(test_out[i][2]) / np.pi)
-
-            fidelities.append(qt.fidelity(qt.Qobj(test_mat), qt.Qobj(pred_mat)))
+            fidelities_direct.append(qt.fidelity(qt.Qobj(test_mat), qt.Qobj(pred_mat)))
+            fidelities_psd.append(qt.fidelity(qt.Qobj(test_mat), qt.Qobj(closest_psd)))
 
             # Add information about whether or not the things are PSD
             if is_psd(test_mat):
@@ -160,7 +145,8 @@ def main():
             actual_test_mats.append(test_mat) 
 
         # Finished going through all the test data!
-        results_nn.append((size, np.average(fidelities))) 
+        print("NN direct avg fidelity " + str(np.average(fidelities_direct)))
+        print("NN PSD avg fidelity " + str(np.average(fidelities_psd)))
 
     # For each testing frequency, do LBMLE reconstruction and compute a fidelity
     do_mle = True
@@ -172,17 +158,16 @@ def main():
             next_results = ["lbmle"]
 
             mle_res = mle.estimate(bases, lbmle_freqs[i])
-            mle_coefs = []
-            if d % 2 == 0:
-                mle_coefs = [np.trace(np.dot(x, mle_res[0])).real for x in op_basis]
-            elif d == 3:
-                mle_coefs= [sqrt(3) * 0.5 * np.trace(np.dot(x, mle_res[0])).real for x in op_basis]
+
+            # Compute the coefficients just to put in the table
+            mle_coefs = [np.trace(np.dot(x, mle_res[0])).real for x in op_basis]
 
             fid = qt.fidelity(qt.Qobj(mle_res[0]), qt.Qobj(actual_test_mats[i]))
 
             next_results.extend(mle_coefs)
 
             if not is_psd(mle_res[0]):
+                # This should *never* happen
                 print("Oh dear, LBMLE reconstructed matrix is not PSD.")
                 print("Matrix has eigenvalues ")
                 print(np.linalg.eigvals(M))
