@@ -42,6 +42,10 @@ def main():
         f = GaloisField(2, 2, [1, 1, 1])
         f.to_sdb([1, 2])
         eigenvectors = eigenvectors_4
+    elif d == 8:
+        f = GaloisField(2, 3, [1, 1, 0, 1])
+        f.to_sdb([3, 5, 6])
+        eigenvectors = eigenvectors_8
     else:
         print("Dimension not supported.")
 
@@ -61,7 +65,7 @@ def main():
     print("Percent test " + str(percent_test))
     print("Bases " + str(bases))
 
-    hidden_layer_sizes = [128]
+    hidden_layer_sizes = [512]
 
     results_nn = []
     actual_test_mats = []
@@ -74,6 +78,9 @@ def main():
     train_in, train_out, test_in, test_out, lbmle_freqs = generate_data(n_trials, n_workers, percent_test, 
                                                                         f, op_basis, eigenvectors, bases)
 
+    t1 = time.time()
+    print("Data generation time : " + str(t1 - t0))
+
     print("Data generation complete.")
     print("Size of training set: " + str(len(train_in)))
     print("Size of testing set: " + str(len(test_in)) + "\n")
@@ -81,6 +88,9 @@ def main():
     for size in hidden_layer_sizes:
         print("Training neural network: ")
         my_nn = train_nn(train_in, train_out, size)
+
+        t2 = time.time()
+        print("Neural network training time: " + str(t2 - t1))
 
         # Normalize the predictions to the length of the Bloch ball in this dimension
         bloch_ball_pf = sqrt(1. * (d - 1) / (2 * d))
@@ -149,8 +159,9 @@ def main():
         print("NN PSD avg fidelity " + str(np.average(fidelities_psd)))
 
     # For each testing frequency, do LBMLE reconstruction and compute a fidelity
-    do_mle = True
+    do_mle = False 
     results_lbmle = []
+    t3 = time.time()
     if do_mle:
         mle = LBMLE(MUBs(f), eigenvectors)
    
@@ -191,9 +202,9 @@ def main():
     for res in results_nn:
         print("Hidden layer size: " + str(res[0]) + " Avg fidelity = " + str(res[1]))
 
-    t1 = time.time()
-
-    print("Total execution time: " + str(t1 - t0))
+    t4 = time.time()
+    print("LBMLE reconstruction time: " + str(t4 - t3))
+    print("Total execution time: " + str(t4 - t0))
 
 if __name__ == '__main__':
     main()
