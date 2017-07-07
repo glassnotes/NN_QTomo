@@ -80,19 +80,72 @@ I put the results in Table \ref{tab:qutrit}. Measuring all 4 bases of course rec
 
 \section{2 qubits}
 
-This is where I'm stuck. So far nothing I've tried seems to work. Average reconstruction fidelity with all 5 MUBs seems stuck at around 0.83. Things that do not work are:
-\begin{itemize}
- \item Adding more hidden layers
- \item Changing the size of the hidden layer(s)
- \item Changing the operator basis; I've tried the Pauli basis (which has tensor product structure) and also the generalized Gell-Mann matrices (which do not)
-\end{itemize}
+After successfully chasing down some rogue constants and normalization factors, I was able to get the 2 qubit case training. I used again 10000 states, which seems to be sufficient. The hidden layer here has size 128. I changed this randomly because I was messing around with things when they didn't work, and just didn't bother to change it back. The states produced are still quite close to being positive semi-definite, though not perfect.
 
-I have a few lines of investigation to follow here and will try more stuff out.
+Training is still extremely fast, in only a couple seconds. The LBMLE process begins to take a long time, however. Results are in table \ref{tab:2qubits}. This is quite interesting; LBMLE seems to slightly outperform the network until we are measuring in only 2 bases; then the network becomes significantly more successful.
+
+\begin{table}[h!]
+ \centering
+ \begin{tabular}{|c||c|c|c|}
+ \hline
+  Num. meas. bases &  Fidelity NN & Fidelity LBMLE \\ \hline
+  5 (All) & 0.99988 &  0.99798 \\
+  4 & 0.96154 & 0.98728 \\
+  3 & 0.91237 &  0.93492 \\
+  2 &  0.84865 & 0.76785 \\ 
+  1 & 0.76184 & 0.62757 \\ \hline
+ \end{tabular}
+ \caption{Fidelity using incomplete measurements. There are too many combinations, so I chose only one set of 4, 3, and 2 bases each time.}
+ \label{tab:2qubits}
+\end{table}
+
+\section{3 qubits}
+
+For 3 qubits, I had to increase significantly the amount of data as well as the size of the hidden layer (50000 points, 45000 for training, and hidden layer size 512). See Table \ref{tab:3qubits}. Unfortunately for this amount of data, comparison with the LBMLE algorithm takes over 1 hour or more, depending on the number of bases measured. Thus for the time being I have stopped doing the comparison and am looking mostly at the parameters of the network itself, as there are some interesting relationships appearing (plotted in figures \ref{fig:dim8_average_fidelity} and \ref{fig:dim8_training_time}.
+
+\begin{table}[h!]
+ \centering
+ \begin{tabular}{|c||c|c|c|}
+ \hline
+  Num. meas. bases &  Fidelity NN & Training time \\ \hline
+  9 (All) & 0.999 & 518.870 \\
+  8 &0.976 & 501.368\\
+  7 & 0.949 & 483.277 \\
+  6 & 0.918 & 466.364 \\
+  5 & 0.885&  448.547 \\
+  4 & 0.846 & 428.746 \\
+  3 & 0.798 &  412.304 \\
+  2 &  0.737 & 394.760 \\ 
+  1 & 0.650  & 357.285 \\ \hline
+ \end{tabular}
+ \caption{Fidelity using incomplete measurements. 50000 data points, 45000 for training, hidden layer size 512. Tried doubling the number of data points for 5 bases case, no change in fidelity, so I suspect 50000 is enough. The relationship between time and number of bases is linear; between fidelity and number of bases is exponential.}
+ \label{tab:3qubits}
+\end{table}
+
+\begin{figure}
+ \includegraphics[scale=0.8]{dim8_average_fidelity}
+ \caption{Average fidelity vs number of bases measured in dimension 8 tests.}
+ \label{fig:dim8_average_fidelity}
+\end{figure}
+
+\begin{figure}
+ \includegraphics[scale=0.8]{dim8_training_time.eps}
+ \caption{Network training time vs number of bases measured in dimension 8 tests.}
+ \label{fig:dim8_training_time}
+\end{figure}
+
+It is interesting too look at the distribution of the fidelities for each case.
+
+\begin{figure}
+ \includegraphics[scale=0.6]{dim8_fidelity_distributions}
+ \caption{Distributions of the fidelity for varying number of measured bases. As expected the range broadens as we take fewer measurements. The case for all 9 bases is so sharply peaked around 1 that it essentially washes out the others, so it's not plotted here.}
+ \label{fig:dim8_fidelity_distributions}
+\end{figure}
+
 
 \section{Next questions}
  Some obvious questions to consider next:
  \begin{itemize} 
-  \item Why aren't things working in dimension 4? Is there a problem with composite systems?
   \item What happens for mixed states? Does the neural network still fare well? We cannot normalize it now, it may live inside the Bloch sphere. How do we ensure that the output is always a vector with norm $< 1$ still close to the original state?
  \end{itemize}
  
