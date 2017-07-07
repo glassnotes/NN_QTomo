@@ -46,6 +46,11 @@ def main():
         f = GaloisField(2, 3, [1, 1, 0, 1])
         f.to_sdb([3, 5, 6])
         eigenvectors = eigenvectors_8
+    elif d == 32:
+        f = GaloisField(2, 5, [1, 0, 1, 0, 0, 1])
+        f.to_sdb([3, 5, 11, 22, 24])
+        from eigvecs_32 import eigenvectors_32
+        eigenvectors = eigenvectors_32
     else:
         print("Dimension not supported.")
 
@@ -54,7 +59,13 @@ def main():
 
     percent_test = float(sys.argv[4])
 
-    bases = [int(x) for x in sys.argv[5].split(",")]
+    # Collect the bases
+    bases = []
+    if sys.argv[5] == "all":
+       bases = [x for x in range(d)] + [-1]
+    else:
+        bases = [int(x) for x in sys.argv[5].split(",")]
+
     op_basis = gen_gell_mann_basis(d)
 
     filename = sys.argv[6]
@@ -65,7 +76,7 @@ def main():
     print("Percent test " + str(percent_test))
     print("Bases " + str(bases))
 
-    hidden_layer_sizes = [512]
+    hidden_layer_sizes = [1024]
 
     results_nn = []
     actual_test_mats = []
