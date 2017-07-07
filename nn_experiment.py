@@ -5,6 +5,8 @@ import sys
 import csv
 import time
 
+from math import sqrt
+
 import numpy as np
 
 # Import all the other things I wrote!
@@ -22,86 +24,55 @@ def main():
         Bases is going to be a list like 0,1,2,-1 etc. so that we can 
         parse it and send it to all the other functions.
     """
-    if len(sys.argv) != 7:
+    if len(sys.argv) != 5:
         print("Not enough arguments provided")
         sys.exit()
 
-    # Set up the finite field
-    f = None
-    eigenvectors = None
+    data_in_file = sys.argv[1]
+    data_out_file = sys.argv[2]
+    percent_test = float(sys.argv[3])
+    filename = sys.argv[4]
 
-    d = int(sys.argv[1])
+    # Grab the data from the files
+    all_data_in = []
+    all_data_out = []
+    with open(data_in_file, "r") as infile:
+        reader = csv.reader(infile)
+        for row in reader:
+            all_data_in.append([float(x) for x in row])
+       
+    with open(data_out_file, "r") as outfile:
+        reader = csv.reader(outfile)
+        for row in reader:
+            all_data_out.append([float(x) for x in row])
 
-    if d == 2:
-        f = GaloisField(d)
-        eigenvectors = eigenvectors_2
-    elif d == 3:
-        f = GaloisField(d)
-        eigenvectors = eigenvectors_3
-    elif d == 4:
-        f = GaloisField(2, 2, [1, 1, 1])
-        f.to_sdb([1, 2])
-        eigenvectors = eigenvectors_4
-    elif d == 8:
-        f = GaloisField(2, 3, [1, 1, 0, 1])
-        f.to_sdb([3, 5, 6])
-        eigenvectors = eigenvectors_8
-    elif d == 32:
-        f = GaloisField(2, 5, [1, 0, 1, 0, 0, 1])
-        f.to_sdb([3, 5, 11, 22, 24])
-        from eigvecs_32 import eigenvectors_32
-        eigenvectors = eigenvectors_32
-    else:
-        print("Dimension not supported.")
+    slice_point = int(percent_test * len(all_data_in))
+    train_in = np.array(all_data_in[slice_point:])
+    train_out = np.array(all_data_out[slice_point:])
+    test_in = np.array(all_data_in[:slice_point])
+    test_out = np.array(all_data_out[:slice_point])
 
-    n_trials = int(sys.argv[2])
-    n_workers = int(sys.argv[3])
-
-    percent_test = float(sys.argv[4])
-
-    # Collect the bases
-    bases = []
-    if sys.argv[5] == "all":
-       bases = [x for x in range(d)] + [-1]
-    else:
-        bases = [int(x) for x in sys.argv[5].split(",")]
+    # Extract the system dimension from the data; should be sqrt(len + 1)
+    d = int(sqrt(len(all_data_out[0]) + 1))
 
     op_basis = gen_gell_mann_basis(d)
 
-    filename = sys.argv[6]
-    
-    print("Dimension: " + str(d))
-    print("Num trials " + str(n_trials))
-    print("Num workers " + str(n_workers))
-    print("Percent test " + str(percent_test))
-    print("Bases " + str(bases))
-
-    hidden_layer_sizes = [1024]
+    hidden_layer_sizes = [64, 1024, 2048, 4096]
 
     results_nn = []
     actual_test_mats = []
+
     # Build the header for the output
     results = [["type"] + ["p" + str(i) for i in range(1, d**2)] + ["psd", "fidelity"]]
 
     t0 = time.time()
 
-    # Generate all the data
-    train_in, train_out, test_in, test_out, lbmle_freqs = generate_data(n_trials, n_workers, percent_test, 
-                                                                        f, op_basis, eigenvectors, bases)
-
-    t1 = time.time()
-    print("Data generation time : " + str(t1 - t0))
-
-    print("Data generation complete.")
-    print("Size of training set: " + str(len(train_in)))
-    print("Size of testing set: " + str(len(test_in)) + "\n")
-
     for size in hidden_layer_sizes:
         print("Training neural network: ")
         my_nn = train_nn(train_in, train_out, size)
 
-        t2 = time.time()
-        print("Neural network training time: " + str(t2 - t1))
+        t1 = time.time()
+        print("Neural network training time: " + str(t1 - t0))
 
         # Normalize the predictions to the length of the Bloch ball in this dimension
         bloch_ball_pf = sqrt(1. * (d - 1) / (2 * d))
@@ -169,6 +140,17 @@ def main():
         print("NN direct avg fidelity " + str(np.average(fidelities_direct)))
         print("NN PSD avg fidelity " + str(np.average(fidelities_psd)))
 
+        with open("hidden_" + str(size) + "_" + filename, "w") as outfile:
+            writer = csv.writer(outfile)
+            for row in results: 
+                writer.writerow(row)
+
+            #for row in results_lbmle:
+            #    writer.writerow(row)
+
+        for res in results_nn:
+            print("Hidden layer size: " + str(res[0]) + " Avg fidelity = " + str(res[1]))
+    """
     # For each testing frequency, do LBMLE reconstruction and compute a fidelity
     do_mle = False 
     results_lbmle = []
@@ -201,20 +183,10 @@ def main():
             results_lbmle.append(next_results)
 
         print("LBMLE avg fidelity = " + str(np.average([x[-1] for x in results_lbmle])))
-
-    with open(filename, "w") as outfile:
-        writer = csv.writer(outfile)
-        for row in results: 
-            writer.writerow(row)
-
-        for row in results_lbmle:
-            writer.writerow(row)
-
-    for res in results_nn:
-        print("Hidden layer size: " + str(res[0]) + " Avg fidelity = " + str(res[1]))
+    """
 
     t4 = time.time()
-    print("LBMLE reconstruction time: " + str(t4 - t3))
+    #print("LBMLE reconstruction time: " + str(t4 - t3))
     print("Total execution time: " + str(t4 - t0))
 
 if __name__ == '__main__':

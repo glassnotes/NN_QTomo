@@ -1,12 +1,16 @@
 from pynitefields import *
 from balthasar import *
 
+import csv
+
 import qutip as qt
 import numpy as np
 
 from multiprocessing import Pool
 
-from math import sqrt
+from eigvecs import *
+from gen_gell_mann_basis import *
+
 
 def multiproc_generation(n_trials, d, mc_engine, bases, op_basis):
     """ On a single processor, generate n_trials random states and frequencies and
@@ -41,7 +45,7 @@ def multiproc_generation(n_trials, d, mc_engine, bases, op_basis):
     return input_frequencies, output_coefs, lbmle_frequencies
 
 
-def generate_data(n_trials, n_workers, percent_test, f, op_basis, eigenvectors, bases):
+def generate_data(n_trials, n_workers, f, op_basis, eigenvectors, bases):
     """ Generate training/testing data sets for our neural network, as well as store the
         testing data separately so we can compare it with the LBMLE reconstruction
         algorithm.
@@ -80,12 +84,77 @@ def generate_data(n_trials, n_workers, percent_test, f, op_basis, eigenvectors, 
     all_lbmle_freqs_ugly = [x[2] for x in all_data]
     all_lbmle_freqs = [x for y in all_lbmle_freqs_ugly for x in y]
 
-    # Split the data set into training and testing
-    slice_point = int(n_trials * percent_test)
-    test_in = np.array(all_freqs[0:slice_point])
-    test_out = np.array(all_coefs[0:slice_point])
-    train_in = np.array(all_freqs[slice_point:])
-    train_out = np.array(all_coefs[slice_point:])
-    lbmle_freqs = np.array(all_lbmle_freqs[0:slice_point])
+    return all_freqs, all_coefs 
 
-    return train_in, train_out, test_in, test_out, lbmle_freqs
+def main():
+    """ Collect user input on the amount of data to generate, and for which bases, etc.
+        Then output this to input files and output files so we don't have to regenerate 
+        hours worth of data every time we run the program.
+    """
+    if len(sys.argv) != 5:     
+        print("Not enough arguments provided")
+        sys.exit()
+  
+    # Set up the finite field
+    f = None
+    eigenvectors = None
+  
+    d = int(sys.argv[1])
+  
+    if d == 2:
+        f = GaloisField(d)
+        eigenvectors = eigenvectors_2
+    elif d == 3:
+        f = GaloisField(d)
+        eigenvectors = eigenvectors_3
+    elif d == 4:
+        f = GaloisField(2, 2, [1, 1, 1])
+        f.to_sdb([1, 2])
+        eigenvectors = eigenvectors_4
+    elif d == 8:
+        f = GaloisField(2, 3, [1, 1, 0, 1])
+        f.to_sdb([3, 5, 6])
+        eigenvectors = eigenvectors_8
+    elif d == 32:
+        f = GaloisField(2, 5, [1, 0, 1, 0, 0, 1])
+        f.to_sdb([3, 5, 11, 22, 24])
+        from eigvecs_32 import eigenvectors_32
+        eigenvectors = eigenvectors_32
+    else:
+        print("Dimension not supported.")
+
+    n_trials = int(sys.argv[2])
+    n_workers = int(sys.argv[3])
+
+    # Collect the bases
+    bases = []
+    if sys.argv[4] == "all":
+        bases = [x for x in range(d)] + [-1]
+    else:
+        bases = [int(x) for x in sys.argv[4].split(",")]
+
+    op_basis = gen_gell_mann_basis(d)
+
+    infilename = "data_in_" + str(d) + "_" + str(n_trials) + "_"
+    outfilename = "data_out_" + str(d) + "_" + str(n_trials) + "_"
+
+    if len(bases) == d + 1:
+        infilename += "allbases.csv"
+        outfilename += "allbases.csv"
+    else:
+        basis_string = "".join([str(x) for x in bases]) + ".csv"
+        infilename += basis_string 
+        outfilename += basis_string 
+    
+    train_in, train_out = generate_data(n_trials, n_workers, f, op_basis, eigenvectors, bases)
+
+    with open(infilename, "w") as infile:
+        writer = csv.writer(infile)
+        writer.writerows(train_in)    
+
+    with open(outfilename, "w") as outfile:
+        writer = csv.writer(outfile)
+        writer.writerows(train_out)    
+
+if __name__ == '__main__':
+    main()
