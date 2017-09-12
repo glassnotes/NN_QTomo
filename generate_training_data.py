@@ -10,6 +10,7 @@ from multiprocessing import Pool
 
 from eigvecs import *
 from gen_gell_mann_basis import *
+from utils import *
 
 def generate_projectors(eigenvectors):
     """ Converts a set of vectors into project form.
@@ -23,6 +24,7 @@ def generate_projectors(eigenvectors):
             projectors_this_basis.append(np.outer(vector, np.conj(vector)))
         projectors.append(projectors_this_basis)
     return projectors
+
 
 def multiproc_generation(eigenvectors, n_trials, d, mc_engine, bases, op_basis):
     """ On a single processor, generate n_trials random states and frequencies and
@@ -102,20 +104,24 @@ def generate_data(n_trials, n_workers, f, op_basis, eigenvectors, bases):
 
     return all_freqs, all_coefs 
 
+
 def main():
     """ Collect user input on the amount of data to generate, and for which bases, etc.
         Then output this to input files and output files so we don't have to regenerate 
         hours worth of data every time we run the program.
     """
-    if len(sys.argv) != 5:     
-        print("Not enough arguments provided")
+    if len(sys.argv) != 2:     
+        print("Please run this script as ")
+        print("python generatedata.py paramfile.txt")
         sys.exit()
+
+    params = parse_param_file(sys.argv[1]) 
   
     # Set up the finite field
     f = None
     eigenvectors = None
-  
-    d = int(sys.argv[1])
+
+    d = params["DIM"]
   
     if d == 2:
         f = GaloisField(d)
@@ -139,36 +145,22 @@ def main():
     else:
         print("Dimension not supported.")
 
-    n_trials = int(sys.argv[2])
-    n_workers = int(sys.argv[3])
-
     # Collect the bases
     bases = []
-    if sys.argv[4] == "all":
+    if params["BASES"] == "all":
         bases = [x for x in range(d)] + [-1]
     else:
-        bases = [int(x) for x in sys.argv[4].split(",")]
+        bases = params["BASES"] 
 
     op_basis = gen_gell_mann_basis(d)
 
-    infilename = "test_data_in_" + str(d) + "_" + str(n_trials) + "_"
-    outfilename = "test_data_out_" + str(d) + "_" + str(n_trials) + "_"
+    train_in, train_out = generate_data(params["N_TRIALS"], params["N_WORKERS"], f, op_basis, eigenvectors, bases)
 
-    if len(bases) == d + 1:
-        infilename += "allbases.csv"
-        outfilename += "allbases.csv"
-    else:
-        basis_string = "".join([str(x) for x in bases]) + ".csv"
-        infilename += basis_string 
-        outfilename += basis_string 
-    
-    train_in, train_out = generate_data(n_trials, n_workers, f, op_basis, eigenvectors, bases)
-
-    with open(infilename, "w") as infile:
+    with open(params["DATA_IN_FILE"], "w") as infile:
         writer = csv.writer(infile)
         writer.writerows(train_in)    
 
-    with open(outfilename, "w") as outfile:
+    with open(params["DATA_OUT_FILE"], "w") as outfile:
         writer = csv.writer(outfile)
         writer.writerows(train_out)    
 

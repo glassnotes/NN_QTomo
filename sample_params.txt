@@ -1,0 +1,11 @@
+# Use the same parameter file for both generating data and a NN experiment
+FILENAME_PREFIX=testdim2
+# Parameters for data generation
+DIM=2                 # Dimension of system
+BASES=all             # Which bases to measure in; comma-separated list or simply all
+N_TRIALS=100              # Total number of data points
+N_WORKERS=1                # Number of threads
+# Parameters for running neural network
+PERCENT_TEST=0.1            # Percentage of data to be used for testing 
+PERCENT_VAL=0.1             # Percentage of data to be used for validation. May be 0.
+HIDDEN_LAYER_SIZES=1024,2048 # 

@@ -3,8 +3,7 @@ from balthasar import *
 
 import sys
 import csv
-import time
-
+import time 
 from math import sqrt
 
 import numpy as np
@@ -15,56 +14,59 @@ from psd_utils import *
 from gen_gell_mann_basis import *
 from generate_training_data import *
 from train_neural_net import *
-
+from utils import *
 
 def main():
-    """ Run this script like the following:
-        python nn_experiment.py dim n_trials n_workers percent_test bases filename
-        
-        Bases is going to be a list like 0,1,2,-1 etc. so that we can 
-        parse it and send it to all the other functions.
-    """
-    if len(sys.argv) != 5:
-        print("Not enough arguments provided")
+    """Runs a neural network configured as per input param file.
+    """ 
+    if len(sys.argv) != 2:
+        print("Please run this script as ")
+        print("python nn_experiment.py paramfile.txt")
         sys.exit()
 
-    data_in_file = sys.argv[1]
-    data_out_file = sys.argv[2]
-    percent_test = float(sys.argv[3])
-    filename = sys.argv[4]
+    params = parse_param_file(sys.argv[1])
 
     # Grab the data from the files
     all_data_in = []
     all_data_out = []
-    with open(data_in_file, "r") as infile:
+
+    with open(params["DATA_IN_FILE"], "r") as infile:
         reader = csv.reader(infile)
         for row in reader:
             all_data_in.append([float(x) for x in row])
        
-    with open(data_out_file, "r") as outfile:
+    with open(params["DATA_OUT_FILE"], "r") as outfile:
         reader = csv.reader(outfile)
         for row in reader:
             all_data_out.append([float(x) for x in row])
 
-    slice_point = int(percent_test * len(all_data_in))
+    # Split into training, testing, and validation
+    slice_point = int(params["PERCENT_TEST"] * len(all_data_in)) 
     train_in = np.array(all_data_in[slice_point:])
     train_out = np.array(all_data_out[slice_point:])
     test_in = np.array(all_data_in[:slice_point])
     test_out = np.array(all_data_out[:slice_point])
 
-    log_filename = filename[:-4] + ".log"
+    # Pipe standard output to the log file.
+    sys.stdout = open(params["LOG_FILE"], 'w')
 
-    sys.stdout = open(log_filename, 'w')
-    
     print("Data loading complete.")
-
+    print("Network and data parameters: ")
+    print("DIMENSION: " + str(params["DIM"]))
+    print("BASES: " + str(params["BASES"]))
+    
+    train_size = params["N_TRIALS"] - params["N_TRIALS"]*(params["PERCENT_TEST"] + params["PERCENT_VAL"])
+    print("TRAIN_SIZE:" + str(train_size)) 
+    print("VAL_SIZE: " + str(params["PERCENT_VAL"] * params["N_TRIALS"]))
+    print("TEST_SIZE: " + str(params["PERCENT_TEST"] * params["N_TRIALS"]))
 
     # Extract the system dimension from the data; should be sqrt(len + 1)
-    d = int(sqrt(len(all_data_out[0]) + 1))
-
+    d = params["DIM"]
+    if d != int(sqrt(len(all_data_out[0]) + 1)):
+        print("Error, mismatch between dimension parameter and output data.")
+    
+    # Generate the Gell-Mann basis for this dimension
     op_basis = gen_gell_mann_basis(d)
-
-    hidden_layer_sizes = [1024, 2048, 4096]
 
     results_nn = []
     actual_test_mats = []
@@ -72,12 +74,12 @@ def main():
     # Build the header for the output
     results = [["type"] + ["p" + str(i) for i in range(1, d**2)] + ["psd", "fidelity"]]
 
-
-    for size in hidden_layer_sizes:
+    for size in params["HIDDEN_LAYER_SIZES"]:
         print("Training neural network: ")
         t0 = time.time()
         my_nn = train_nn(train_in, train_out, size)
         t1 = time.time()
+        print("Hidden layer size: " + str(size))
         print("Neural network training time: " + str(t1 - t0))
 
         # Normalize the predictions to the length of the Bloch ball in this dimension
@@ -88,7 +90,6 @@ def main():
         # Compute the fidelity with the test data
         fidelities_direct = []
         fidelities_psd = []
-
 
         for i in range(len(test_in)):
             # We are going to store data for three things:
@@ -147,13 +148,15 @@ def main():
         print("NN direct avg fidelity " + str(np.average(fidelities_direct)))
         print("NN PSD avg fidelity " + str(np.average(fidelities_psd)))
 
-        with open("hidden_" + str(size) + "_" + filename, "w") as outfile:
+        outfile_name = params["FILENAME_PREFIX"] + "_b" + params["BASES"] + "_h" + str(size) + ".out"
+        with open(outfile_name, "w") as outfile:
             writer = csv.writer(outfile)
             for row in results: 
                 writer.writerow(row)
 
             #for row in results_lbmle:
             #    writer.writerow(row)
+
     """
     # For each testing frequency, do LBMLE reconstruction and compute a fidelity
     do_mle = False 
@@ -188,7 +191,6 @@ def main():
 
         print("LBMLE avg fidelity = " + str(np.average([x[-1] for x in results_lbmle])))
     """
-
 
 if __name__ == '__main__':
     main()
