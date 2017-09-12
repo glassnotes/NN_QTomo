@@ -11,8 +11,20 @@ from multiprocessing import Pool
 from eigvecs import *
 from gen_gell_mann_basis import *
 
+def generate_projectors(eigenvectors):
+    """ Converts a set of vectors into project form.
+        Keeps order/format the same.
+    """
+    projectors = []
+  
+    for basis in eigenvectors:
+        projectors_this_basis = []
+        for vector in basis:
+            projectors_this_basis.append(np.outer(vector, np.conj(vector)))
+        projectors.append(projectors_this_basis)
+    return projectors
 
-def multiproc_generation(n_trials, d, mc_engine, bases, op_basis):
+def multiproc_generation(eigenvectors, n_trials, d, mc_engine, bases, op_basis):
     """ On a single processor, generate n_trials random states and frequencies and
         return it for processing by the master thread.
     """
@@ -21,11 +33,15 @@ def multiproc_generation(n_trials, d, mc_engine, bases, op_basis):
     output_coefs = [] 
     lbmle_frequencies = []
 
+    projs = generate_projectors(eigenvectors) 
+
+
     for i in range(n_trials):
         state_ket = qt.rand_ket_haar(d)
         state = qt.ket2dm(state_ket).full()
 
-        freqs = mc_engine.simulate(bases, state)
+        #freqs = mc_engine.simulate(bases, state)
+        freqs = [[float(np.real(np.trace(np.dot(state, projs[basis_idx][j])))) for j in range(len(projs[0]))] for basis_idx in range(len(bases))]
 
         # Flatten to add to NN data set
         flat_freqs = []
@@ -67,7 +83,7 @@ def generate_data(n_trials, n_workers, f, op_basis, eigenvectors, bases):
 
     # Set parameters for multiprocessing
     trials_per_worker = int(n_trials * 1./ n_workers) 
-    input_params = [(trials_per_worker, f.dim, mc_engine, bases, op_basis)] * n_workers
+    input_params = [(eigenvectors, trials_per_worker, f.dim, mc_engine, bases, op_basis)] * n_workers
 
     # Call in the troops!
     pool = Pool(processes = n_workers)
@@ -135,8 +151,8 @@ def main():
 
     op_basis = gen_gell_mann_basis(d)
 
-    infilename = "data_in_" + str(d) + "_" + str(n_trials) + "_"
-    outfilename = "data_out_" + str(d) + "_" + str(n_trials) + "_"
+    infilename = "test_data_in_" + str(d) + "_" + str(n_trials) + "_"
+    outfilename = "test_data_out_" + str(d) + "_" + str(n_trials) + "_"
 
     if len(bases) == d + 1:
         infilename += "allbases.csv"

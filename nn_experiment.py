@@ -52,12 +52,19 @@ def main():
     test_in = np.array(all_data_in[:slice_point])
     test_out = np.array(all_data_out[:slice_point])
 
+    log_filename = filename[:-4] + ".log"
+
+    sys.stdout = open(log_filename, 'w')
+    
+    print("Data loading complete.")
+
+
     # Extract the system dimension from the data; should be sqrt(len + 1)
     d = int(sqrt(len(all_data_out[0]) + 1))
 
     op_basis = gen_gell_mann_basis(d)
 
-    hidden_layer_sizes = [64, 1024, 2048, 4096]
+    hidden_layer_sizes = [1024, 2048, 4096]
 
     results_nn = []
     actual_test_mats = []
@@ -65,12 +72,11 @@ def main():
     # Build the header for the output
     results = [["type"] + ["p" + str(i) for i in range(1, d**2)] + ["psd", "fidelity"]]
 
-    t0 = time.time()
 
     for size in hidden_layer_sizes:
         print("Training neural network: ")
+        t0 = time.time()
         my_nn = train_nn(train_in, train_out, size)
-
         t1 = time.time()
         print("Neural network training time: " + str(t1 - t0))
 
@@ -137,6 +143,7 @@ def main():
             actual_test_mats.append(test_mat) 
 
         # Finished going through all the test data!
+        print("Hidden layer size:  " + str(size))
         print("NN direct avg fidelity " + str(np.average(fidelities_direct)))
         print("NN PSD avg fidelity " + str(np.average(fidelities_psd)))
 
@@ -147,9 +154,6 @@ def main():
 
             #for row in results_lbmle:
             #    writer.writerow(row)
-
-        for res in results_nn:
-            print("Hidden layer size: " + str(res[0]) + " Avg fidelity = " + str(res[1]))
     """
     # For each testing frequency, do LBMLE reconstruction and compute a fidelity
     do_mle = False 
@@ -185,9 +189,6 @@ def main():
         print("LBMLE avg fidelity = " + str(np.average([x[-1] for x in results_lbmle])))
     """
 
-    t4 = time.time()
-    #print("LBMLE reconstruction time: " + str(t4 - t3))
-    print("Total execution time: " + str(t4 - t0))
 
 if __name__ == '__main__':
     main()

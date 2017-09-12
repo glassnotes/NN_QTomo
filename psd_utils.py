@@ -39,3 +39,18 @@ def find_closest_psd(M):
         PSDM = PSDM + eigvals[x] * np.outer(next_eigvec, np.conj(next_eigvec))
 
     return PSDM 
+
+def find_closest_pure(M):
+    # First we need to compute the eigensystem
+    eigsys = np.linalg.eigh(M)
+    eigvals, eigvecs = eigsys[0], eigsys[1]
+
+    # Figure out the indices of the positive eigvalues
+    max_eigval = np.argmax(eigvals)
+
+
+    max_eigvec = eigvecs[:,max_eigval]
+    PSDM = eigvals[max_eigval] * np.outer(max_eigvec, np.conj(max_eigvec))
+    PSDM = PSDM / np.trace(PSDM)
+
+    return PSDM 
