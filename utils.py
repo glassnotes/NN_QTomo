@@ -40,9 +40,10 @@ def parse_param_file(filename):
             elif param == "HIDDEN_LAYER_SIZES":
                 params["HIDDEN_LAYER_SIZES"] = [int(h) for h in value.split(",")]
 
-    params["DATA_IN_FILE"] = params["FILENAME_PREFIX"] + "_d" + str(params["DIM"]) + "_b" + str(params["BASES"]) + "_in.csv"
-    params["DATA_OUT_FILE"] = params["FILENAME_PREFIX"] + "_d" + str(params["DIM"]) + "_b" + str(params["BASES"]) + "_out.csv"
-    params["LOG_FILE"] = params["FILENAME_PREFIX"] + "_d" + str(params["DIM"]) + "_b" + str(params["BASES"]) + ".log"
+    postfix = "_d" + str(params["DIM"]) + "_b" + "".join(str(x) for x in params["BASES"])
+    params["DATA_IN_FILE"] = params["FILENAME_PREFIX"] + postfix +  "_in.csv"
+    params["DATA_OUT_FILE"] = params["FILENAME_PREFIX"] + postfix + "_out.csv" 
+    params["LOG_FILE"] = params["FILENAME_PREFIX"] + postfix + ".log" 
 
     return params
 
