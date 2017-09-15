@@ -1,6 +1,3 @@
-from pynitefields import *
-from balthasar import *
-
 import csv
 
 import qutip as qt
@@ -11,6 +8,26 @@ from multiprocessing import Pool
 from eigvecs import *
 from gen_gell_mann_basis import *
 from utils import *
+
+def extract_parameters(state):
+    """ Turn the density matrix into something that looks like L^dag L
+        with L lower diagonal and having d^2 - 1 parameters.
+    """
+    # First add the identity to make it positive definite
+    d = state.shape[0]
+    state = state + np.eye(d)
+    L = np.linalg.cholesky(state)
+
+    ts = []
+    for i in range(d):
+        for j in range(i + 1):
+            if i == j:
+                ts.append(state[i][j])
+            else:
+                ts.append(state[i][j].real)
+                ts.append(state[i][j].imag)
+
+    return ts
 
 def generate_projectors(eigenvectors):
     """ Converts a set of vectors into project form.
@@ -26,17 +43,13 @@ def generate_projectors(eigenvectors):
     return projectors
 
 
-def multiproc_generation(eigenvectors, n_trials, d, mc_engine, bases, op_basis):
+def multiproc_generation(projs, n_trials, d, mc_engine, bases, op_basis):
     """ On a single processor, generate n_trials random states and frequencies and
         return it for processing by the master thread.
     """
     # Result storage
     input_frequencies = []
     output_coefs = [] 
-    lbmle_frequencies = []
-
-    projs = generate_projectors(eigenvectors) 
-
 
     for i in range(n_trials):
         state_ket = qt.rand_ket_haar(d)
@@ -58,12 +71,11 @@ def multiproc_generation(eigenvectors, n_trials, d, mc_engine, bases, op_basis):
         # Update the data sets
         input_frequencies.append(flat_freqs)
         output_coefs.append(coefs)
-        lbmle_frequencies.append(freqs)
 
-    return input_frequencies, output_coefs, lbmle_frequencies
+    return input_frequencies, output_coefs 
 
 
-def generate_data(n_trials, n_workers, f, op_basis, eigenvectors, bases):
+def generate_data(n_trials, n_workers, d, op_basis, projs, bases):
     """ Generate training/testing data sets for our neural network, as well as store the
         testing data separately so we can compare it with the LBMLE reconstruction
         algorithm.
@@ -71,21 +83,20 @@ def generate_data(n_trials, n_workers, f, op_basis, eigenvectors, bases):
         n_trails - Total number of data points
         n_workers - Number of processes to spawn for generation (please make nicely divisible into n_trails)
         percent_test - How much of the data to return as testing data.
-        f - The underlying finite field
         op_basis - The basis expansion in which we should compute the output coefficients
-        eigenvectors - The MUBs in this dimension
+        projs - The projectors of the MUBs in this dimension
         bases - The bases that we're measuring in.
 
-        Returns train_in, train_out, test_in, test_out, and lbmle_freqs which is a copy of 
-        test_in but suitable for use in the LBMLE reconstruction algorithm of Balthasar.
+        Returns train_in, train_out, test_in, test_out.
     """
     # Create the MUBs and MLE simulator
     mubs = MUBs(f) 
-    mc_engine = LBMLE_MC(eigenvectors)
+    mc_engine = MCExperiment(eigenvectors)
 
     # Set parameters for multiprocessing
     trials_per_worker = int(n_trials * 1./ n_workers) 
-    input_params = [(eigenvectors, trials_per_worker, f.dim, mc_engine, bases, op_basis)] * n_workers
+
+    input_params = [(projs, trials_per_worker, d, mc_engine, bases, op_basis)] * n_workers
 
     # Call in the troops!
     pool = Pool(processes = n_workers)
@@ -99,9 +110,6 @@ def generate_data(n_trials, n_workers, f, op_basis, eigenvectors, bases):
     all_coefs_ugly = [x[1] for x in all_data]
     all_coefs = [x for y in all_coefs_ugly for x in y]
          
-    all_lbmle_freqs_ugly = [x[2] for x in all_data]
-    all_lbmle_freqs = [x for y in all_lbmle_freqs_ugly for x in y]
-
     return all_freqs, all_coefs 
 
 
@@ -118,32 +126,25 @@ def main():
     params = parse_param_file(sys.argv[1]) 
   
     # Set up the finite field
-    f = None
     eigenvectors = None
 
     d = params["DIM"]
   
     if d == 2:
-        f = GaloisField(d)
         eigenvectors = eigenvectors_2
     elif d == 3:
-        f = GaloisField(d)
         eigenvectors = eigenvectors_3
     elif d == 4:
-        f = GaloisField(2, 2, [1, 1, 1])
-        f.to_sdb([1, 2])
         eigenvectors = eigenvectors_4
     elif d == 8:
-        f = GaloisField(2, 3, [1, 1, 0, 1])
-        f.to_sdb([3, 5, 6])
         eigenvectors = eigenvectors_8
     elif d == 32:
-        f = GaloisField(2, 5, [1, 0, 1, 0, 0, 1])
-        f.to_sdb([3, 5, 11, 22, 24])
         from eigvecs_32 import eigenvectors_32
         eigenvectors = eigenvectors_32
     else:
         print("Dimension not supported.")
+
+    projs = generate_projectors(eigenvectors)
 
     # Collect the bases
     bases = []
@@ -154,7 +155,7 @@ def main():
 
     op_basis = gen_gell_mann_basis(d)
 
-    train_in, train_out = generate_data(params["N_TRIALS"], params["N_WORKERS"], f, op_basis, eigenvectors, bases)
+    train_in, train_out = generate_data(params["N_TRIALS"], params["N_WORKERS"], d, op_basis, projs, bases)
 
     with open(params["DATA_IN_FILE"], "w") as infile:
         writer = csv.writer(infile)

@@ -13,7 +13,7 @@ from eigvecs import *
 from psd_utils import *
 from gen_gell_mann_basis import *
 from generate_training_data import *
-from train_neural_net import *
+from tomonn import *
 from utils import *
 
 def main():
@@ -77,120 +77,31 @@ def main():
     for size in params["HIDDEN_LAYER_SIZES"]:
         print("Training neural network: ")
         t0 = time.time()
-        my_nn = train_nn(train_in, train_out, size)
+
+        my_nn = TomoNN(d) 
+        my_nn.train(train_in, train_out, size)
+
         t1 = time.time()
         print("Hidden layer size: " + str(size))
         print("Neural network training time: " + str(t1 - t0))
 
-        # Normalize the predictions to the length of the Bloch ball in this dimension
-        bloch_ball_pf = sqrt(1. * (d - 1) / (2 * d))
-        predictions = my_nn.predict(test_in)
-        scaled_predictions = [bloch_ball_pf * p / np.linalg.norm(p) for p in predictions]
+        # Create the output states for all of the test data.
+        test_psds = [(1./d)*np.eye(d) + np.sum([t[j] * op_basis[j] for j in range(d ** 2 - 1)], 0) for t in test_out]
+        closest_psds, closest_coefs = my_nn.predict(test_in)
 
         # Compute the fidelity with the test data
-        fidelities_direct = []
-        fidelities_psd = []
-
-        for i in range(len(test_in)):
-            # We are going to store data for three things:
-            # The original test state, the state predicted by the NN, and the closest PSD state to the prediction
-            next_results_test = ["test"]
-            next_results_pred = ["pred"]
-            next_results_closest = ["closest"]
-
-            # Compute the density matrix using the reconstructed coefficients
-            test_mat = (1./d)*np.eye(d) + np.sum([test_out[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)
-            pred_mat = (1./d)*np.eye(d) + np.sum([scaled_predictions[i][j] * op_basis[j] for j in range(d ** 2 - 1)], 0)
-
-            # Now that we've computed the predicted matrix, compute the closest PSD matrix
-            closest_psd = find_closest_psd(pred_mat)
-            closest_coefs = [0.5 * np.trace(np.dot(x, closest_psd)).real for x in op_basis]
-
-            # Add all the coefficients to their proper rows
-            next_results_test.extend(test_out[i])
-            next_results_pred.extend(scaled_predictions[i])
-            next_results_closest.extend(closest_coefs)
-
-            fidelities_direct.append(qt.fidelity(qt.Qobj(test_mat), qt.Qobj(pred_mat)))
-            fidelities_psd.append(qt.fidelity(qt.Qobj(test_mat), qt.Qobj(closest_psd)))
-
-            # Add information about whether or not the things are PSD
-            if is_psd(test_mat):
-                next_results_test.append(1)
-            else:
-                next_results_test.append(0)
-
-            if is_psd(pred_mat):
-                next_results_pred.append(1)
-            else:
-                next_results_pred.append(0)
-
-            if is_psd(closest_psd): # Obviously this should be PSD, but still check
-                next_results_closest.append(1)
-            else:
-                next_results_closest.append(0)
-
-            # Add the fidelities
-            next_results_test.append(1)
-            next_results_pred.append(qt.fidelity(qt.Qobj(test_mat), qt.Qobj(pred_mat)))
-            next_results_closest.append(qt.fidelity(qt.Qobj(test_mat), qt.Qobj(closest_psd)))
-
-            # Update the results with this data point
-            results.append(next_results_test)
-            results.append(next_results_pred)
-            results.append(next_results_closest)
-
-            # Store the actual matrices to use in LBMLE section later
-            actual_test_mats.append(test_mat) 
+        fidelities_psd = [qt.fidelity(qt.Qobj(test_psds[i]), qt.Qobj(closest_psds[i])) for i in range(len(test_psds))]
 
         # Finished going through all the test data!
         print("Hidden layer size:  " + str(size))
-        print("NN direct avg fidelity " + str(np.average(fidelities_direct)))
         print("NN PSD avg fidelity " + str(np.average(fidelities_psd)))
 
-        outfile_name = params["FILENAME_PREFIX"] + "_b" + params["BASES"] + "_h" + str(size) + ".out"
+        outfile_name = params["LOG_FILE"][:-4] + "_h" + str(size) + ".pred"
         with open(outfile_name, "w") as outfile:
             writer = csv.writer(outfile)
             for row in results: 
                 writer.writerow(row)
 
-            #for row in results_lbmle:
-            #    writer.writerow(row)
-
-    """
-    # For each testing frequency, do LBMLE reconstruction and compute a fidelity
-    do_mle = False 
-    results_lbmle = []
-    t3 = time.time()
-    if do_mle:
-        mle = LBMLE(MUBs(f), eigenvectors)
-   
-        for i in range(len(lbmle_freqs)):
-            next_results = ["lbmle"]
-
-            mle_res = mle.estimate(bases, lbmle_freqs[i])
-
-            # Compute the coefficients just to put in the table
-            mle_coefs = [np.trace(np.dot(x, mle_res[0])).real for x in op_basis]
-
-            fid = qt.fidelity(qt.Qobj(mle_res[0]), qt.Qobj(actual_test_mats[i]))
-
-            next_results.extend(mle_coefs)
-
-            if not is_psd(mle_res[0]):
-                # This should *never* happen
-                print("Oh dear, LBMLE reconstructed matrix is not PSD.")
-                print("Matrix has eigenvalues ")
-                print(np.linalg.eigvals(M))
-                next_results.append(0)
-            else:
-                next_results.append(1)
-
-            next_results.append(fid)
-            results_lbmle.append(next_results)
-
-        print("LBMLE avg fidelity = " + str(np.average([x[-1] for x in results_lbmle])))
-    """
 
 if __name__ == '__main__':
     main()
