@@ -1,33 +1,15 @@
 import csv
 
+import sys
 import qutip as qt
 import numpy as np
 
 from multiprocessing import Pool
 
+from mcexperiment import *
 from eigvecs import *
-from gen_gell_mann_basis import *
+from state_utils import *
 from utils import *
-
-def extract_parameters(state):
-    """ Turn the density matrix into something that looks like L^dag L
-        with L lower diagonal and having d^2 - 1 parameters.
-    """
-    # First add the identity to make it positive definite
-    d = state.shape[0]
-    state = state + np.eye(d)
-    L = np.linalg.cholesky(state)
-
-    ts = []
-    for i in range(d):
-        for j in range(i + 1):
-            if i == j:
-                ts.append(state[i][j])
-            else:
-                ts.append(state[i][j].real)
-                ts.append(state[i][j].imag)
-
-    return ts
 
 def generate_projectors(eigenvectors):
     """ Converts a set of vectors into project form.
@@ -66,7 +48,8 @@ def multiproc_generation(projs, n_trials, d, mc_engine, bases, op_basis):
         # Compute the Bloch vector coefficients using the Gell-Mann basis.
         # This will be a vector of length sqrt((d-1)/2d))
         # The factor of 0.5 is because the traces of the Gell-Mann ops are all 2
-        coefs = [0.5 * np.trace(np.dot(x, state)).real for x in op_basis]
+        #coefs = [0.5 * np.trace(np.dot(x, state)).real for x in op_basis]
+        coefs = extract_parameters(state)
 
         # Update the data sets
         input_frequencies.append(flat_freqs)
@@ -75,7 +58,7 @@ def multiproc_generation(projs, n_trials, d, mc_engine, bases, op_basis):
     return input_frequencies, output_coefs 
 
 
-def generate_data(n_trials, n_workers, d, op_basis, projs, bases):
+def generate_data(n_trials, n_workers, d, op_basis, eigenvectors, bases):
     """ Generate training/testing data sets for our neural network, as well as store the
         testing data separately so we can compare it with the LBMLE reconstruction
         algorithm.
@@ -90,8 +73,9 @@ def generate_data(n_trials, n_workers, d, op_basis, projs, bases):
         Returns train_in, train_out, test_in, test_out.
     """
     # Create the MUBs and MLE simulator
-    mubs = MUBs(f) 
     mc_engine = MCExperiment(eigenvectors)
+
+    projs = generate_projectors(eigenvectors)
 
     # Set parameters for multiprocessing
     trials_per_worker = int(n_trials * 1./ n_workers) 
@@ -139,12 +123,9 @@ def main():
     elif d == 8:
         eigenvectors = eigenvectors_8
     elif d == 32:
-        from eigvecs_32 import eigenvectors_32
         eigenvectors = eigenvectors_32
     else:
         print("Dimension not supported.")
-
-    projs = generate_projectors(eigenvectors)
 
     # Collect the bases
     bases = []
@@ -155,7 +136,7 @@ def main():
 
     op_basis = gen_gell_mann_basis(d)
 
-    train_in, train_out = generate_data(params["N_TRIALS"], params["N_WORKERS"], d, op_basis, projs, bases)
+    train_in, train_out = generate_data(params["N_TRIALS"], params["N_WORKERS"], d, op_basis, eigenvectors, bases)
 
     with open(params["DATA_IN_FILE"], "w") as infile:
         writer = csv.writer(infile)

@@ -3,8 +3,8 @@ from keras.models import Sequential
 
 from math import sqrt
 import numpy as np
-from psd_utils import find_closest_psd
-from gen_gell_mann_basis import *
+
+from state_utils import * 
 
 class TomoNN():
     """ Build and train a neural network using the 'experimental data'.
@@ -34,14 +34,14 @@ class TomoNN():
         inputs = Input(shape = i_shape)
 
         # Now begin building the model and add a single dense layer
-        self.model.add(Dense(hidden_layer_size, activation = "tanh", input_shape = i_shape))
+        self.model.add(Dense(hidden_layer_size, activation = "linear", input_shape = i_shape))
     
         # Add the output layer; need only one node that outputs a vector
-        self.model.add(Dense(len(train_out[0]), activation = "tanh")) 
+        self.model.add(Dense(len(train_out[0]), activation = "linear")) 
     
         # Cosine proximity gives us a measure of the angle between the true/predicted
         # values on the Bloch sphere.
-        self.model.compile(optimizer = "sgd", loss = 'cosine_proximity')
+        self.model.compile(optimizer = "sgd", loss = 'mean_squared_error')
 
         self.model.fit(train_in, train_out, epochs = 100, batch_size = 20, verbose = 2)
 
@@ -57,7 +57,7 @@ class TomoNN():
             the outputs make physical sense, i.e. are positive semi-definite and    
             have trace 1.
         """
-        op_basis = gen_gell_mann_basis(self.d)
+        """op_basis = gen_gell_mann_basis(self.d)
         bloch_ball_pf = sqrt(1. * (self.d - 1) / (2 * self.d)) 
         base_predictions = self.model.predict(test_in)
          
@@ -66,6 +66,15 @@ class TomoNN():
         pred_mats = [(1./self.d)*np.eye(self.d) + np.sum([p[j]*op_basis[j] for j in range(self.d**2-1)], 0) for p in scaled_predictions]
         
         closest_psds = [find_closest_psd(p) for p in pred_mats]
-        closest_coefs = [[0.5 * np.trace(np.dot(x, p)).real for x in op_basis] for p in closest_psds]
+        closest_coefs = [[0.5 * np.trace(np.dot(x, p)).real for x in op_basis] for p in closest_psds]"""
 
-        return closest_psds, closest_coefs
+
+        base_predictions = self.model.predict(test_in)
+        print(base_predictions[0:5])
+    
+        closest_psds = [reconstruct_from_parameters(t) for t in base_predictions]
+
+        are_psd = [is_psd(cp) for cp in closest_psds]
+        print(str(are_psd.count(0)) + " reconstructions are not PSD.")
+
+        return closest_psds, base_predictions

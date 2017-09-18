@@ -10,8 +10,7 @@ import numpy as np
 
 # Import all the other things I wrote!
 from eigvecs import *
-from psd_utils import *
-from gen_gell_mann_basis import *
+from state_utils import *
 from generate_training_data import *
 from tomonn import *
 from utils import *
@@ -86,8 +85,13 @@ def main():
         print("Neural network training time: " + str(t1 - t0))
 
         # Create the output states for all of the test data.
-        test_psds = [(1./d)*np.eye(d) + np.sum([t[j] * op_basis[j] for j in range(d ** 2 - 1)], 0) for t in test_out]
+        #test_psds = [(1./d)*np.eye(d) + np.sum([t[j] * op_basis[j] for j in range(d ** 2 - 1)], 0) for t in test_out]
+        print(test_out[0:5])
+        test_psds = [reconstruct_from_parameters(t) for t in test_out]
         closest_psds, closest_coefs = my_nn.predict(test_in)
+
+        print(test_psds[0])
+        print(closest_psds[0])
 
         # Compute the fidelity with the test data
         fidelities_psd = [qt.fidelity(qt.Qobj(test_psds[i]), qt.Qobj(closest_psds[i])) for i in range(len(test_psds))]
