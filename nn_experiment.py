@@ -1,7 +1,4 @@
-from pynitefields import *
-from balthasar import *
-
-import sys
+import os, sys
 import csv
 import time 
 from math import sqrt
@@ -9,11 +6,7 @@ from math import sqrt
 import numpy as np
 
 # Import all the other things I wrote!
-from eigvecs import *
-from state_utils import *
-from generate_training_data import *
-from tomonn import *
-from utils import *
+from quinton import *
 
 def main():
     """Runs a neural network configured as per input param file.
@@ -29,6 +22,14 @@ def main():
     all_data_in = []
     all_data_out = []
 
+    # If the corresponding data files don't already exist,
+    # we will need to generate them.
+    if not os.path.exists('./' + params["DATA_IN_FILE"]):
+        print("Data file not found; generating data.")
+        dg = TomoDataGenerator(params)
+        dg.generate()
+        
+    # Now read in the data.
     with open(params["DATA_IN_FILE"], "r") as infile:
         reader = csv.reader(infile)
         for row in reader:
@@ -40,11 +41,15 @@ def main():
             all_data_out.append([float(x) for x in row])
 
     # Split into training, testing, and validation
-    slice_point = int(params["PERCENT_TEST"] * len(all_data_in)) 
-    train_in = np.array(all_data_in[slice_point:])
-    train_out = np.array(all_data_out[slice_point:])
-    test_in = np.array(all_data_in[:slice_point])
-    test_out = np.array(all_data_out[:slice_point])
+    test_slice_point = int(params["PERCENT_TEST"] * params["N_TRIALS"])
+    val_slice_point = int(test_slice_point + params["PERCENT_VAL"] * params["N_TRIALS"])
+
+    test_in = np.array(all_data_in[:test_slice_point])
+    test_out = np.array(all_data_out[:test_slice_point])
+    val_in = np.array(all_data_in[test_slice_point:val_slice_point])
+    val_out = np.array(all_data_in[test_slice_point:val_slice_point])
+    train_in = np.array(all_data_in[val_slice_point:])
+    train_out = np.array(all_data_out[val_slice_point:])
 
     # Pipe standard output to the log file.
     sys.stdout = open(params["LOG_FILE"], 'w')
@@ -64,9 +69,6 @@ def main():
     if d != int(sqrt(len(all_data_out[0]) + 1)):
         print("Error, mismatch between dimension parameter and output data.")
     
-    # Generate the Gell-Mann basis for this dimension
-    op_basis = gen_gell_mann_basis(d)
-
     results_nn = []
     actual_test_mats = []
 
@@ -77,27 +79,27 @@ def main():
         print("Training neural network: ")
         t0 = time.time()
 
-        my_nn = TomoNN(d) 
-        my_nn.train(train_in, train_out, size)
+        my_nn = TomoNeuralNetwork(params) 
+        my_nn.train(size, train_in, train_out)
 
         t1 = time.time()
         print("Hidden layer size: " + str(size))
         print("Neural network training time: " + str(t1 - t0))
 
         # Create the output states for all of the test data.
-        #test_psds = [(1./d)*np.eye(d) + np.sum([t[j] * op_basis[j] for j in range(d ** 2 - 1)], 0) for t in test_out]
-        print(test_out[0:5])
-        test_psds = [reconstruct_from_parameters(t) for t in test_out]
-        closest_psds, closest_coefs = my_nn.predict(test_in)
+        test_psds = [(1./d)*np.eye(d) + np.sum([t[j] * params["OP_BASIS"][j] for j in range(d ** 2 - 1)], 0) for t in test_out]
 
-        print(test_psds[0])
-        print(closest_psds[0])
+        closest_psds, closest_coefs = my_nn.predict(test_in)
 
         # Compute the fidelity with the test data
         fidelities_psd = [qt.fidelity(qt.Qobj(test_psds[i]), qt.Qobj(closest_psds[i])) for i in range(len(test_psds))]
 
+        print(closest_psds[0])
+        print(closest_coefs[0])
+        print(test_psds[0])
+        print(test_out[0])
+
         # Finished going through all the test data!
-        print("Hidden layer size:  " + str(size))
         print("NN PSD avg fidelity " + str(np.average(fidelities_psd)))
 
         outfile_name = params["LOG_FILE"][:-4] + "_h" + str(size) + ".pred"
