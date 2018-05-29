@@ -42,14 +42,11 @@ def main():
 
     # Split into training, testing, and validation
     test_slice_point = int(params["PERCENT_TEST"] * params["N_TRIALS"])
-    val_slice_point = int(test_slice_point + params["PERCENT_VAL"] * params["N_TRIALS"])
 
     test_in = np.array(all_data_in[:test_slice_point])
     test_out = np.array(all_data_out[:test_slice_point])
-    val_in = np.array(all_data_in[test_slice_point:val_slice_point])
-    val_out = np.array(all_data_in[test_slice_point:val_slice_point])
-    train_in = np.array(all_data_in[val_slice_point:])
-    train_out = np.array(all_data_out[val_slice_point:])
+    train_in = np.array(all_data_in[test_slice_point:])
+    train_out = np.array(all_data_out[test_slice_point:])
 
     # Pipe standard output to the log file.
     sys.stdout = open(params["LOG_FILE"], 'w')
@@ -59,9 +56,10 @@ def main():
     print("DIMENSION: " + str(params["DIM"]))
     print("BASES: " + str(params["BASES"]))
     
-    train_size = params["N_TRIALS"] - params["N_TRIALS"]*(params["PERCENT_TEST"] + params["PERCENT_VAL"])
+    train_size = (params["N_TRIALS"] * (1 - params["PERCENT_TEST"])) 
+
     print("TRAIN_SIZE:" + str(train_size)) 
-    print("VAL_SIZE: " + str(params["PERCENT_VAL"] * params["N_TRIALS"]))
+    print("VAL_SIZE: " + str(params["PERCENT_VAL"] * train_size ))
     print("TEST_SIZE: " + str(params["PERCENT_TEST"] * params["N_TRIALS"]))
 
     # Extract the system dimension from the data; should be sqrt(len + 1)
@@ -73,7 +71,8 @@ def main():
     actual_test_mats = []
 
     # Build the header for the output
-    results = [["type"] + ["p" + str(i) for i in range(1, d**2)] + ["psd", "fidelity"]]
+    #results = [["type"] + ["p" + str(i) for i in range(1, d**2)] + ["psd", "fidelity"]]
+    header = ["a" + str(i) for i in range(1, d**2)] + ["norm", "purity", "is_psd", "fidelity"]
 
     for size in params["HIDDEN_LAYER_SIZES"]:
         print("Training neural network: ")
@@ -94,10 +93,6 @@ def main():
         # Compute the fidelity with the test data
         fidelities_psd = [qt.fidelity(qt.Qobj(test_psds[i]), qt.Qobj(closest_psds[i])) for i in range(len(test_psds))]
 
-        print(closest_psds[0])
-        print(closest_coefs[0])
-        print(test_psds[0])
-        print(test_out[0])
 
         # Finished going through all the test data!
         print("NN PSD avg fidelity " + str(np.average(fidelities_psd)))
@@ -105,9 +100,15 @@ def main():
         outfile_name = params["LOG_FILE"][:-4] + "_h" + str(size) + ".pred"
         with open(outfile_name, "w") as outfile:
             writer = csv.writer(outfile)
-            for row in results: 
+            writer.writerow(header)
+            for i in range(len(closest_psds)):
+                row = []
+                row.extend(closest_coefs[i])
+                row.append(np.linalg.norm(closest_coefs[i]))
+                row.append(np.trace(np.dot(closest_psds[i], closest_psds[i])).real)
+                row.append(is_psd(closest_psds[i]))
+                row.append(fidelities_psd[i])
                 writer.writerow(row)
-
 
 if __name__ == '__main__':
     main()
