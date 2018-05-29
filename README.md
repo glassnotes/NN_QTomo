@@ -19,6 +19,14 @@ The general idea is that we perform supervised learning where the input data is 
 
 # Installation
 
-Install by performing 'python setup.py install' in the main directory.
+Install by performing
+```
+python setup.py install
+```
+in the main directory.
 
-The script nn_experiment.py can be run from command line using the syntax 'python nn_experiment.py <paramfile>'. A sample param file is provided in the main directory.
+The script `nn_experiment.py` can be run from command line using
+```
+python nn_experiment.py <paramfile>
+```
+A sample parameter file is provided in the main directory.
